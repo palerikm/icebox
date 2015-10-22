@@ -52,10 +52,8 @@ void signalPathHandler(int sockfd,
       printf("Registered\n");
       state = REGISTERED;
     }else{
-       printf("Registration faile with %s\n", message);
-
+       printf("Registration failed with %s\n", message);
     }
-
   }
 
   //printf("%s\n", message);
@@ -109,9 +107,28 @@ void *socketListen(void *ptr){
         }
 }
 
+
+
+int registerUser(int sockfd, char *user)
+{
+    int numbytes;
+    //REGISTER
+    state = REGISTERING;
+    char str[255];
+    strncpy(str,"REGISTER ", 255);
+    strncat(str, user, 245);
+
+
+    if ((numbytes = send(sockfd, str,strlen(str), 0 )) == -1) {
+      perror("registerUser: send");
+      return -1;
+    }
+    return 1;
+}
+
 int main(int argc, char *argv[])
 {
-    int sockfd, numbytes;
+    int sockfd;
     //char buf[MAXDATASIZE];
     struct addrinfo hints, *servinfo, *p;
     int rv;
@@ -167,20 +184,7 @@ int main(int argc, char *argv[])
     lconf.signal_path_handler = signalPathHandler;
     pthread_create( &socketListenThread, NULL, socketListen, (void*)&lconf);
 
-
-    //REGISTER
-    state = REGISTERING;
-    char str[255];
-    strncpy(str,"REGISTER ", 255);
-    strncat(str, argv[2], 255);
-
-
-    if ((numbytes = send(sockfd, str,strlen(str), 0 )) == -1) {
-        perror("send");
-        exit(1);
-      }
-
-
+    registerUser(sockfd, argv[2]);
     //if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
     //    perror("recv");
     //    exit(1);
