@@ -28,6 +28,7 @@ typedef enum{
   UNDEF,
   REGISTERING,
   REGISTERED,
+  INVITING,
 }client_state;
 
 //Yay, global variables
@@ -53,6 +54,20 @@ void signalPathHandler(int sockfd,
       state = REGISTERED;
     }else{
        printf("Registration failed with %s\n", message);
+    }
+  }
+  if (state == INVITING){
+    if(strncmp((const char *)message, "100 Trying", 6)==0){
+      printf("Invite sendt\n");
+    }else{
+      printf("Invitation failed with %s\n", message);
+    }
+  }
+  if (state == REGISTERED){
+    if(strncmp((const char *)message, "INVITE", 6)==0){
+      printf("Got invite from %s\n", message+7);
+    }else{
+      printf("Got something %s\n", message);
     }
   }
 
@@ -126,6 +141,28 @@ int registerUser(int sockfd, char *user)
     return 1;
 }
 
+int inviteUser(int sockfd, char *user)
+{
+    int numbytes;
+    char str[255];
+
+    if(state!= REGISTERED){
+      return -1;
+    }
+
+    state = INVITING;
+
+    strncpy(str,"INVITE ", 255);
+    strncat(str, user, 245);
+
+
+    if ((numbytes = send(sockfd, str,strlen(str), 0 )) == -1) {
+      perror("inviteUser: send");
+      return -1;
+    }
+    return 1;
+}
+
 int main(int argc, char *argv[])
 {
     int sockfd;
@@ -138,8 +175,8 @@ int main(int argc, char *argv[])
 
     pthread_t socketListenThread;
 
-    if (argc != 3) {
-        fprintf(stderr,"usage: icebox hostname\n");
+    if (argc < 3) {
+        fprintf(stderr,"usage: icebox hostname user remoteuser\n");
         exit(1);
     }
 
@@ -185,6 +222,13 @@ int main(int argc, char *argv[])
     pthread_create( &socketListenThread, NULL, socketListen, (void*)&lconf);
 
     registerUser(sockfd, argv[2]);
+    if(argc ==4){
+      //Ok got nothing better to do. Busywaiting
+      while(state != REGISTERED){}
+      inviteUser(sockfd, argv[3]);
+    }
+
+
     //if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
     //    perror("recv");
     //    exit(1);
