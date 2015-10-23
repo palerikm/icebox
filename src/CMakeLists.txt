@@ -22,6 +22,7 @@ if( OPENSSL_FOUND )
 endif( OPENSSL_FOUND )
 
 add_executable ( icebox
+                 signaling.c
                  icebox.c )
 
 target_link_libraries ( icebox PRIVATE pthread

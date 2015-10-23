@@ -17,95 +17,29 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
+#include "signaling.h"
+
 #define PORT "5061" // the port client will be connecting to
 #define MAXBUFLEN 1024
 #define MAXDATASIZE 200 // max number of bytes we can get at once
-#define MAX_USER_LEN 128
 
-typedef enum{
-  UNDEF,
-  REGISTERING,
-  REGISTERED,
-  INVITING,
-}client_state;
 
-//Yay, global variables
-client_state state = UNDEF;
-char user[MAX_USER_LEN];
+
+
+
+
 
 struct listenConfig{
+    struct prg_data *prg;
     int sockfd;
 
     /*Handles normal data like RTP etc */
-    void (*signal_path_handler)(int sockfd,
+    void (*signal_path_handler)(client_state *state,
+                                int sockfd,
                                 unsigned char *);
 
 };
 
-void signalPathHandler(int sockfd,
-                       unsigned char *message)
-{
-  char *delim = "\n:\\";
-  char *tok = strtok((char *)message, delim);
-
-  if (state == REGISTERING){
-    if(strncmp(tok, "200 OK", 6)==0){
-      printf("Registered\n");
-      state = REGISTERED;
-    }else{
-       printf("Registration failed with %s\n", message);
-    }
-  }
-  if (state == INVITING){
-    if(strncmp(tok, "100 Trying", 6)==0){
-      printf("Invitation recieved at notice server\n");
-      return;
-    }
-    if(strncmp(tok, "200 OK", 6)==0){
-      printf("Got a 200 OK (Session Established..)\n");
-    }else{
-      printf("Invitation failed with %s\n", message);
-    }
-  }
-  if (state == REGISTERED){
-    if(strncmp(tok, "INVITE", 6)==0){
-      int numbytes;
-      char str[255];
-      char str_to[128];
-      char str_from[128];
-      int i;
-
-      //Worst parser ever, works by accident
-      for(i=0;i<2;i++){
-        tok = strtok(NULL, delim);
-        printf("tok: (%s)\n",tok);
-        if( strcmp(tok, "To") == 0){
-          tok = strtok(NULL, delim);
-          while( isspace(*tok)) tok++;
-          strncpy(str_from, tok, strlen(tok));
-        }
-        if( strcmp(tok, "From") == 0){
-          printf("Got a from token\n");
-          tok = strtok(NULL, delim);
-          while( isspace(*tok)) tok++;
-          strncpy(str_to, tok, strlen(tok));
-        }
-      }
-
-      strncpy(str,"200 OK\nTo: \0", 12);
-      strncat(str, str_to, strlen(str_to));
-      strncat(str, "\nFrom: ", 7);
-      strncat(str, str_from, strlen(str_from));
-      printf("Sending 200OK\n%s\n", str);
-
-      if ((numbytes = send(sockfd, str,strlen(str), 0 )) == -1) {
-        perror("200Ok: send");
-      }
-    }else{
-      printf("Got something %s\n", message);
-    }
-  }
-}
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -146,7 +80,8 @@ void *socketListen(void *ptr){
                         perror("recvfrom");
                         exit(1);
                     }
-                    lconfig->signal_path_handler(ufds[i].fd,
+                    lconfig->signal_path_handler(&lconfig->prg->state,
+                                                 ufds[i].fd,
                                                  buf);
                     }
                 }
@@ -156,51 +91,6 @@ void *socketListen(void *ptr){
 
 
 
-int registerUser(int sockfd, char *user_reg)
-{
-    int numbytes;
-    char str[255];
-
-    printf("Registering: %s\n", user_reg);
-    state = REGISTERING;
-
-    strncpy(str,"REGISTER ", 255);
-    strncat(str, user_reg, 245);
-
-    if ((numbytes = send(sockfd, str,strlen(str), 0 )) == -1) {
-      perror("registerUser: send");
-      return -1;
-    }
-    return 1;
-}
-
-int inviteUser(int sockfd, char *to, char *from)
-{
-    int numbytes;
-    char str[255];
-    memset(str, 0, sizeof str);
-
-    if(state!= REGISTERED){
-      return -1;
-    }
-
-    state = INVITING;
-
-    strncpy(str,"INVITE ", 255);
-    strncat(str, to, MAX_USER_LEN);
-    strncat(str, "\n", 1);
-    strncat(str, "To: ",4);
-    strncat(str, to, MAX_USER_LEN);
-    strncat(str, "\nFrom: ", 7);
-    strncat(str, from, MAX_USER_LEN);
-
-    printf("Sending invite\n%s\n", str);
-    if ((numbytes = send(sockfd, str,strlen(str), 0 )) == -1) {
-      perror("inviteUser: send");
-      return -1;
-    }
-    return 1;
-}
 
 int main(int argc, char *argv[])
 {
@@ -210,7 +100,12 @@ int main(int argc, char *argv[])
     int rv;
     char s[INET6_ADDRSTRLEN];
 
+    struct prg_data prg;
+
     struct listenConfig lconf;
+
+    lconf.prg = &prg;
+
 
     pthread_t socketListenThread;
 
@@ -260,13 +155,13 @@ int main(int argc, char *argv[])
     lconf.signal_path_handler = signalPathHandler;
     pthread_create( &socketListenThread, NULL, socketListen, (void*)&lconf);
 
-    strncpy(user, argv[2], MAX_USER_LEN);
+    strncpy(prg.user, argv[2], MAX_USER_LEN);
 
-    registerUser(sockfd, user);
+    registerUser(&prg.state, sockfd, prg.user);
     if(argc ==4){
       //Ok got nothing better to do. Busywaiting
-      while(state != REGISTERED){}
-      inviteUser(sockfd, argv[3], user);
+      while(prg.state != REGISTERED){}
+      inviteUser(&prg.state, sockfd, argv[3], prg.user);
     }
 
 
