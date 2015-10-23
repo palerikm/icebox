@@ -22,9 +22,6 @@
 #define MAXDATASIZE 200 // max number of bytes we can get at once
 #define MAX_USER_LEN 128
 
-
-
-
 typedef enum{
   UNDEF,
   REGISTERING,
@@ -96,10 +93,8 @@ void signalPathHandler(int sockfd,
       }
 
       strncpy(str,"200 OK\nTo: \0", 12);
-
       strncat(str, str_to, strlen(str_to));
       strncat(str, "\nFrom: ", 7);
-
       strncat(str, str_from, strlen(str_from));
       printf("Sending 200OK\n%s\n", str);
 
@@ -110,8 +105,6 @@ void signalPathHandler(int sockfd,
       printf("Got something %s\n", message);
     }
   }
-
-  //printf("%s\n", message);
 }
 
 // get sockaddr, IPv4 or IPv6:
@@ -120,7 +113,6 @@ void *get_in_addr(struct sockaddr *sa)
     if (sa->sa_family == AF_INET) {
         return &(((struct sockaddr_in*)sa)->sin_addr);
     }
-
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
@@ -167,12 +159,13 @@ void *socketListen(void *ptr){
 int registerUser(int sockfd, char *user_reg)
 {
     int numbytes;
-    //REGISTER
-    state = REGISTERING;
     char str[255];
+
+    printf("Registering: %s\n", user_reg);
+    state = REGISTERING;
+
     strncpy(str,"REGISTER ", 255);
     strncat(str, user_reg, 245);
-
 
     if ((numbytes = send(sockfd, str,strlen(str), 0 )) == -1) {
       perror("registerUser: send");
