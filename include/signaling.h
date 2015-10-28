@@ -1,4 +1,4 @@
-
+#pragma once
 
 #define MAX_USER_LEN 128
 
@@ -17,6 +17,6 @@ struct prg_data{
 void signalPathHandler(client_state *state,
                        int sockfd,
                        unsigned char *message);
-                       
+
 int inviteUser(client_state *state, int sockfd, char *to, char *from);
 int registerUser(client_state *state, int sockfd, char *user_reg);

@@ -13,6 +13,7 @@ endif( OPENSSL_FOUND )
 
 add_executable ( icebox
                  signaling.c
+                 sockethelper.c
                  icebox.c )
 
 target_link_libraries ( icebox PRIVATE stunlib sockaddrutil
