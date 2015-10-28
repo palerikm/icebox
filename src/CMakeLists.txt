@@ -2,16 +2,6 @@
 #
 # ICEbox, the complete ice testing client.
 
-# add the automatically determined parts of the RPATH
-# which point to directories outside the build tree to the install RPATH
-#SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-
-# the RPATH to be used when installing, but only if it's not a system directory
-#LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_PREFIX}/lib" isSystemDir)
-#IF("${isSystemDir}" STREQUAL "-1")
-#   SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
-#ENDIF("${isSystemDir}" STREQUAL "-1")
 
 set (ADDITIONAL_LIBS "")
 
@@ -25,8 +15,12 @@ add_executable ( icebox
                  signaling.c
                  icebox.c )
 
-target_link_libraries ( icebox PRIVATE pthread
+target_link_libraries ( icebox PRIVATE stunlib sockaddrutil
+                        pthread
                         ${ADDITIONAL_LIBS})
+
+set_target_properties(icebox PROPERTIES INSTALL_RPATH "${install_dir}/lib")
+set_target_properties(icebox PROPERTIES BUILD_WITH_INSTALL_RPATH ON)
 
 include_directories ( ../include )
 link_directories ( ${CHECK_LIBRARY_DIRS} )
