@@ -123,6 +123,21 @@ include ( CPack )
 UncrustifyTop(${uncrustify})
 
 Include(ExternalProject)
+
+ExternalProject_Add(
+   project_sockaddrutil
+   GIT_REPOSITORY https://github.com/NPPT/sockaddrutil.git
+   CMAKE_ARGS -Doptimize=OFF -Duse_context=ON -Dbuild_docs=OFF -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+   INSTALL_DIR "${dist_dir}"
+   UPDATE_DISCONNECTED 1
+)
+
+ExternalProject_Get_Property(project_sockaddrutil install_dir)
+include_directories ( "${install_dir}/include" )
+add_library(sockaddrutil STATIC IMPORTED)
+set_property(TARGET sockaddrutil PROPERTY IMPORTED_LOCATION "${install_dir}/lib/${CMAKE_SHARED_MODULE_PREFIX}sockaddrutil${CMAKE_SHARED_LIBRARY_SUFFIX}")
+add_dependencies(sockaddrutil project_sockaddrutil)
+
 ExternalProject_Add(
    project_stunlib
    GIT_REPOSITORY https://github.com/NPPT/stunlib.git
