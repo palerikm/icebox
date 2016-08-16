@@ -12,11 +12,13 @@ if( OPENSSL_FOUND )
 endif( OPENSSL_FOUND )
 
 add_executable ( icebox
+                 sdp.c
+                 candidate_harvester.c
                  signaling.c
                  sockethelper.c
                  icebox.c )
 
-target_link_libraries ( icebox PRIVATE stunlib sockaddrutil
+target_link_libraries ( icebox PRIVATE icelib stunlib sockaddrutil
                         pthread
                         ${ADDITIONAL_LIBS})
 

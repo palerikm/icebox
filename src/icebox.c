@@ -22,6 +22,8 @@
 
 #include "signaling.h"
 #include "sockethelper.h"
+#include "candidate_harvester.h"
+#include "sdp.h"
 
 #define SERVERPORT "5061" /* the port client will be connecting to */
 #define MAXBUFLEN 1024
@@ -42,7 +44,7 @@ struct listenConfig {
   /*Handles normal data like RTP etc */
   void (* signal_path_handler)(client_state* state,
                                int           sockfd,
-                               unsigned char *);
+                               unsigned char*);
 };
 
 
@@ -118,26 +120,26 @@ socketListen(void* ptr)
 }
 
 
-static void*
-tickTurn(void* ptr)
-{
-  struct timespec     timer;
-  struct timespec     remaining;
-  TURN_INSTANCE_DATA* instData = (TURN_INSTANCE_DATA*)ptr;
-  timer.tv_sec  = 0;
-  timer.tv_nsec = 50000000;
-
-  for (;; )
-  {
-    nanosleep(&timer, &remaining);
-
-    if (instData != NULL)
-    {
-      TurnClient_HandleTick(instData);
-    }
-  }
-
-}
+/* static void* */
+/* tickTurn(void* ptr) */
+/* { */
+/*  struct timespec     timer; */
+/*  struct timespec     remaining; */
+/*  TURN_INSTANCE_DATA* instData = (TURN_INSTANCE_DATA*)ptr; */
+/*  timer.tv_sec  = 0; */
+/*  timer.tv_nsec = 50000000; */
+/*  */
+/*  for (;; ) */
+/*  { */
+/*    nanosleep(&timer, &remaining); */
+/*  */
+/*    if (instData != NULL) */
+/*    { */
+/*      TurnClient_HandleTick(instData); */
+/*    } */
+/*  } */
+/*  */
+/* } */
 
 void
 sendRawStun(int                    sockHandle,
@@ -157,22 +159,22 @@ sendRawStun(int                    sockHandle,
   }
 
   sockaddr_toString(dstAddr, addrStr, SOCKADDR_MAX_STRLEN, true);
-  /* printf("Sending Raw (To: '%s'(%i), Bytes:%i/%i  )\n", addrStr, sockHandle,
-   * numbytes, bufLen); */
+  printf("Sending Raw (To: '%s'(%i), Bytes:%i/%i  )\n", addrStr, sockHandle,
+         numbytes, bufLen);
 
   /* return numbytes; */
 }
 
-static void
-turnSendFunc(const uint8_t*         buffer,
-             size_t                 bufLen,
-             const struct sockaddr* dstAddr,
-             void*                  userCtx)
-{
-
-  int sockfd = *(int*)userCtx;
-  sendRawStun(sockfd, buffer, bufLen, dstAddr);
-}
+/* static void */
+/* turnSendFunc(const uint8_t*         buffer, */
+/*             size_t                 bufLen, */
+/*             const struct sockaddr* dstAddr, */
+/*             void*                  userCtx) */
+/* { */
+/*  */
+/*  int sockfd = *(int*)userCtx; */
+/*  sendRawStun(sockfd, buffer, bufLen, dstAddr); */
+/* } */
 
 void
 turnCbFunc(void*               userCtx,
@@ -224,16 +226,16 @@ turnCbFunc(void*               userCtx,
 }
 
 
-static void
-turnInfoFunc(void*              userCtx,
-             TurnInfoCategory_T category,
-             char*              ErrStr)
-{
-  (void)userCtx;
-  (void)category;
-    printf("TurnInfoCB");
-    printf("%s\n", ErrStr);
-}
+/* static void */
+/* turnInfoFunc(void*              userCtx, */
+/*             TurnInfoCategory_T category, */
+/*             char*              ErrStr) */
+/* { */
+/*  (void)userCtx; */
+/*  (void)category; */
+/*    printf("TurnInfoCB"); */
+/*    printf("%s\n", ErrStr); */
+/* } */
 
 int
 main(int   argc,
@@ -244,11 +246,11 @@ main(int   argc,
   struct addrinfo     servinfo, * p;
 
 
-  struct sockaddr_storage taddr;
+  /* struct sockaddr_storage taddr; */
   lconf.prg = &prg;
 
   pthread_t socketListenThread;
-  pthread_t turnTickThread;
+  /* pthread_t turnTickThread; */
 
   if (argc < 3)
   {
@@ -277,37 +279,67 @@ main(int   argc,
 
   strncpy(prg.user, argv[2], MAX_USER_LEN);
 
-  registerUser(&prg.state, lconf.sigsock, prg.user);
+  /* registerUser(&prg.state, lconf.sigsock, prg.user); */
+
+
+  struct hcand* udp_cand     = NULL;
+  int32_t       udp_cand_len = harvest_host(&udp_cand, SOCK_DGRAM);
+
+  struct hcand* tcp_cand     = NULL;
+  int32_t       tcp_cand_len = harvest_host(&tcp_cand, SOCK_STREAM);
+
+
+  size_t sdpSize = 1024;
+  /* size_t sdpEnd = 0; */
+  char* sdp = calloc(sizeof(char), sdpSize);
+
+  if (sdpCandCat(sdp, &sdpSize,
+                 udp_cand, udp_cand_len) == 0)
+  {
+    printf("Failed to write UDP candidates to SDP. Too small buffer?\n");
+  }
+  if (sdpCandCat(sdp, &sdpSize,
+                 tcp_cand, tcp_cand_len) == 0)
+  {
+    printf("Failed to write TCP candidates to SDP. Too small buffer?\n");
+  }
+
+
+  printf("%s", sdp);
+
+
+
+  free(udp_cand);
+  free(tcp_cand);
+  free(sdp);
 
   /* Signal path set up, time to gather the candidates */
   /* Turn setup */
 
 
 
-  if ( 0 != getSockaddrFromFqdn( (struct sockaddr*)&taddr, argv[1] ) )
-  {
-    printf("Error getting TURN Server IP\n");
-    return 1;
-  }
+  /* if ( 0 != getSockaddrFromFqdn( (struct sockaddr*)&taddr, argv[1] ) ) */
+  /* { */
+  /*  printf("Error getting TURN Server IP\n"); */
+  /*  return 1; */
+  /* } */
 
-    printf("Starting TURN party!\n");
-
-  TurnClient_StartAllocateTransaction(&lconf.turnInst,
-                                      50,
-                                      turnInfoFunc,
-                                      "icebox",
-                                      &lconf.msock, /* *userCtx */
-                                      (struct sockaddr*)&taddr,
-                                      "test\0", /*argv[2],*/
-                                      "pass\0", /*argv[2],*/
-                                      AF_INET,
-                                      turnSendFunc,
-                                      turnCbFunc,
-                                      false,
-                                      0);
+  /* TurnClient_StartAllocateTransaction(&lconf.turnInst, */
+  /*                                    50, */
+  /*                                    turnInfoFunc, */
+  /*                                    "icebox", */
+  /*                                      &lconf.msock, / * *userCtx * / */
+  /*                                    (struct sockaddr*)&taddr, */
+  /* /                                  "test\0", / *argv[2],* / */
+  /*                                "pass\0", / *argv[2],* / */
+  /*                              AF_INET, */
+  /*                            turnSendFunc, */
+  /*                          turnCbFunc, */
+  /*                        false, */
+  /*                      0); */
 
 
-  pthread_create(&turnTickThread, NULL, tickTurn, (void*)lconf.turnInst);
+  /* pthread_create(&turnTickThread, NULL, tickTurn, (void*)lconf.turnInst); */
 
 
   if (argc == 4)
