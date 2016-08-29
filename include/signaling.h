@@ -17,13 +17,15 @@ struct prg_data {
 void
 signalPathHandler(client_state*  state,
                   int            sockfd,
-                  unsigned char* message);
+                  char* message,
+                  int            len);
 
 int
 inviteUser(client_state* state,
            int           sockfd,
            char*         to,
-           char*         from);
+           char*         from,
+           char*         sdp);
 int
 registerUser(client_state* state,
              int           sockfd,

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 #include "signaling.h"
 
@@ -18,7 +19,7 @@ registerUser(client_state* state,
   *state = REGISTERING;
 
   strncpy(str,"REGISTER ", 255);
-  strncat(str, user_reg, 245);
+  strlcat(str, user_reg, 245);
 
   if ( ( numbytes = send(sockfd, str,strlen(str), 0) ) == -1 )
   {
@@ -28,14 +29,32 @@ registerUser(client_state* state,
   return 1;
 }
 
+
+int
+NumDigits(int x)
+{
+  /* x = abs(x); */
+  return ( x < 10 ? 1 :
+           ( x < 100 ? 2 :
+             ( x < 1000 ? 3 :
+               ( x < 10000 ? 4 :
+                 ( x < 100000 ? 5 :
+                   ( x < 1000000 ? 6 :
+                     ( x < 10000000 ? 7 :
+                       ( x < 100000000 ? 8 :
+                         (x < 1000000000 ? 9 :
+                          10) ) ) ) ) ) ) ) );
+}
+
 int
 inviteUser(client_state* state,
            int           sockfd,
            char*         to,
-           char*         from)
+           char*         from,
+           char*         sdp)
 {
   int  numbytes;
-  char str[255];
+  char str[4096];
   memset(str, 0, sizeof str);
 
   if (*state != REGISTERED)
@@ -45,32 +64,57 @@ inviteUser(client_state* state,
 
   *state = INVITING;
 
-  strncpy(str,"INVITE ", 255);
-  strncat(str, to,         MAX_USER_LEN);
-  strncat(str, "\n",       1);
-  strncat(str, "To: ",     4);
-  strncat(str, to,         MAX_USER_LEN);
-  strncat(str, "\nFrom: ", 7);
-  strncat(str, from,       MAX_USER_LEN);
+  strlcat( str, "INVITE ",                         sizeof(str) );
+  strlcat( str, to,                                sizeof(str) );
+  strlcat( str, "\n",                              sizeof(str) );
+  strlcat( str, "To: ",                            sizeof(str) );
+  strlcat( str, to,                                sizeof(str) );
+  strlcat( str, "\nFrom: ",                        sizeof(str) );
+  strlcat( str, from,                              sizeof(str) );
+  strlcat( str, "\n",                              sizeof(str) );
+  strlcat( str, "Content-Type: application/sdp\n", sizeof(str) );
+  strlcat( str, "Content-Length: ",                sizeof(str) );
+  int  len = strlen(sdp);
+  char len_str[NumDigits(len)];
+  sprintf(len_str, "%d", len);
 
+  strlcat( str, len_str, sizeof(str) );
+  strlcat( str, "\n",    sizeof(str) );
+  strlcat( str, "\r\n",  sizeof(str) );
+
+  strlcat( str, sdp,     sizeof(str) );
   printf("Sending invite\n%s\n", str);
   if ( ( numbytes = send(sockfd, str,strlen(str), 0) ) == -1 )
   {
     perror("inviteUser: send");
     return -1;
   }
+  printf("Sendt: %i\n", numbytes);
   return 1;
 }
 
 void
-signalPathHandler(client_state*  state,
-                  int            sockfd,
-                  unsigned char* message)
+parseSDP(char* sdp,
+         int   len)
+{
+  (void)len;
+  printf("About to parse SDP---\n");
+  for (int i = 0; i < len; i++)
+  {
+    printf("%c", sdp[i]);
+  }
+
+}
+
+
+void
+signalPathHandler(client_state* state,
+                  int           sockfd,
+                  char*         message,
+                  int           len)
 {
   char* delim = "\n:\\";
   char* tok   = strtok( (char*)message, delim );
-
-  printf("Handling...\n");
 
   if (*state == REGISTERING)
   {
@@ -111,10 +155,9 @@ signalPathHandler(client_state*  state,
       int  i;
 
       /* Worst parser ever, works by accident */
-      for (i = 0; i < 2; i++)
+      for (i = 0; i < 5; i++)
       {
         tok = strtok(NULL, delim);
-        printf("tok: (%s)\n",tok);
         if (strcmp(tok, "To") == 0)
         {
           tok = strtok(NULL, delim);
@@ -126,7 +169,6 @@ signalPathHandler(client_state*  state,
         }
         if (strcmp(tok, "From") == 0)
         {
-          printf("Got a from token\n");
           tok = strtok(NULL, delim);
           while ( isspace(*tok) )
           {
@@ -134,22 +176,29 @@ signalPathHandler(client_state*  state,
           }
           strncpy( str_to, tok, strlen(tok) );
         }
+        if (strcmp(tok, "Content-Length") == 0)
+        {
+          tok = strtok(NULL, delim);
+          while ( isspace(*tok) )
+          {
+            tok++;
+            int sdp_len = atoi(tok);
+            parseSDP(message + (len - sdp_len), len);
+          }
+        }
       }
+      strlcat( str, "200 OK\nTo: ", sizeof(str) );
+      strlcat( str, str_to,         sizeof(str) );
+      strlcat( str, "\nFrom: ",     sizeof(str) );
+      strlcat( str, str_from,       sizeof(str) );
 
-      strncpy(str,"200 OK\nTo: \0", 12);
-      strncat( str, str_to,     strlen(str_to) );
-      strncat( str, "\nFrom: ", 7);
-      strncat( str, str_from,   strlen(str_from) );
       printf("Sending 200OK\n%s\n", str);
 
       if ( ( numbytes = send(sockfd, str,strlen(str), 0) ) == -1 )
       {
         perror("200Ok: send");
       }
-    }
-    else
-    {
-      printf("Got something %s\n", message);
+
     }
   }
 }

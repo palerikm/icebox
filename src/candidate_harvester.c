@@ -82,6 +82,10 @@ store_cand(struct hcand** candidates,
   cand[*numCand].sockfd = sockfd;
   /* Set sockfd as foundation as well */
   sprintf(cand[*numCand].ice.foundation, "%d", sockfd);
+
+  /* Somebody should set this priority later */
+  cand[*numCand].ice.priority = 0;
+
   if (proto == SOCK_DGRAM)
   {
     cand[*numCand].ice.transport = ICE_TRANS_UDP;

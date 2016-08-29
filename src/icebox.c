@@ -26,7 +26,7 @@
 #include "sdp.h"
 
 #define SERVERPORT "5061" /* the port client will be connecting to */
-#define MAXBUFLEN 1024
+#define MAXBUFLEN 4096
 #define MAXDATASIZE 200 /* max number of bytes we can get at once */
 
 #define STUNPORT "3478"    /* the port users will be connecting to */
@@ -44,7 +44,8 @@ struct listenConfig {
   /*Handles normal data like RTP etc */
   void (* signal_path_handler)(client_state* state,
                                int           sockfd,
-                               unsigned char*);
+                               char*,
+                               int           buflen);
 };
 
 
@@ -101,7 +102,8 @@ socketListen(void* ptr)
           {
             lconfig->signal_path_handler(&lconfig->prg->state,
                                          ufds[i].fd,
-                                         buf);
+                                         (char*)buf,
+                                         numbytes);
           }
           if (i == 1)
           {
@@ -279,7 +281,7 @@ main(int   argc,
 
   strncpy(prg.user, argv[2], MAX_USER_LEN);
 
-  /* registerUser(&prg.state, lconf.sigsock, prg.user); */
+  registerUser(&prg.state, lconf.sigsock, prg.user);
 
 
   struct hcand* udp_cand     = NULL;
@@ -289,7 +291,7 @@ main(int   argc,
   int32_t       tcp_cand_len = harvest_host(&tcp_cand, SOCK_STREAM);
 
 
-  size_t sdpSize = 1024;
+  size_t sdpSize = 4096;
   /* size_t sdpEnd = 0; */
   char* sdp = calloc(sizeof(char), sdpSize);
 
@@ -304,14 +306,8 @@ main(int   argc,
     printf("Failed to write TCP candidates to SDP. Too small buffer?\n");
   }
 
+  printf("SDP:\n %s \n", sdp);
 
-  printf("%s", sdp);
-
-
-
-  free(udp_cand);
-  free(tcp_cand);
-  free(sdp);
 
   /* Signal path set up, time to gather the candidates */
   /* Turn setup */
@@ -348,13 +344,18 @@ main(int   argc,
     while (prg.state != REGISTERED)
     {
     }
-    inviteUser(&prg.state, lconf.sigsock, argv[3], prg.user);
+    inviteUser(&prg.state, lconf.sigsock, argv[3], prg.user, sdp);
+
   }
+  free(sdp);
+  free(udp_cand);
+  free(tcp_cand);
 
   /* Just wait a bit for now.. */
   printf("About to sleep\n");
   sleep(100);
   close(lconf.sigsock);
+
 
   return 0;
 }
