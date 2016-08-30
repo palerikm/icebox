@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 
+#include "sdp.h"
 #include "signaling.h"
 
 int
@@ -93,18 +94,9 @@ inviteUser(client_state* state,
   return 1;
 }
 
-void
-parseSDP(char* sdp,
-         int   len)
-{
-  (void)len;
-  printf("About to parse SDP---\n");
-  for (int i = 0; i < len; i++)
-  {
-    printf("%c", sdp[i]);
-  }
 
-}
+
+
 
 
 void
@@ -183,6 +175,8 @@ signalPathHandler(client_state* state,
           {
             tok++;
             int sdp_len = atoi(tok);
+            /* Maybe some more sanyty cheking? */
+            /* This does not work with partial messages and so on.. */
             parseSDP(message + (len - sdp_len), len);
           }
         }
