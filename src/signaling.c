@@ -106,6 +106,7 @@ signalPathHandler(client_state*    state,
                   char*            message,
                   int              len)
 {
+  char*  sdp = NULL;
   char* delim = "\n:\\";
   char* tok   = strtok( (char*)message, delim );
 
@@ -142,7 +143,7 @@ signalPathHandler(client_state*    state,
     if (strncmp(tok, "INVITE", 6) == 0)
     {
       int  numbytes;
-      char str[255];
+      char str[4096];
       char str_to[128];
       char str_from[128];
       int  i;
@@ -179,6 +180,20 @@ signalPathHandler(client_state*    state,
             /* Maybe some more sanyty cheking? */
             /* This does not work with partial messages and so on.. */
             parseSDP(icelib, message + (len - sdp_len), len);
+            //Ok, so now we send our local candidate back in the 200 Ok
+            const ICE_MEDIA_STREAM* media =
+              ICELIB_getLocalMediaStream(icelib,
+                                         0);
+
+            size_t sdpSize = 4096;
+            sdp     = calloc(sizeof(char), sdpSize);
+
+            if (sdpCandCat(sdp, &sdpSize,
+                           media->candidate, media->numberOfCandidates) == 0)
+            {
+              printf("Failed to write candidates to SDP. Too small buffer?\n");
+            }
+
           }
         }
       }
@@ -186,6 +201,22 @@ signalPathHandler(client_state*    state,
       strlcat( str, str_to,         sizeof(str) );
       strlcat( str, "\nFrom: ",     sizeof(str) );
       strlcat( str, str_from,       sizeof(str) );
+      if(sdp != NULL){
+        strlcat( str, "\n",                              sizeof(str) );
+        strlcat( str, "Content-Type: application/sdp\n", sizeof(str) );
+        strlcat( str, "Content-Length: ",                sizeof(str) );
+        int  len = strlen(sdp);
+        char len_str[NumDigits(len)];
+        sprintf(len_str, "%d", len);
+
+        strlcat( str, len_str, sizeof(str) );
+        strlcat( str, "\n",    sizeof(str) );
+        strlcat( str, "\r\n",  sizeof(str) );
+
+        strlcat( str, sdp,     sizeof(str) );
+
+      }
+
 
       printf("Sending 200OK\n%s\n", str);
 
