@@ -1,4 +1,6 @@
 #pragma once
+
+#include <icelib.h>
 #include "candidate_harvester.h"
 
 
@@ -13,16 +15,23 @@ enum cand_f {
   max_cand_f
 };
 
+enum cline_f {
+  nettype,
+  addrtype,
+  clineaddr,
+  max_cline_f
+};
 
 char*
-sdp_candidate_toString(ICE_CANDIDATE* cand);
+sdp_candidate_toString(const ICE_CANDIDATE* cand);
 
 size_t
-sdpCandCat(char*         sdp,
-           size_t*       sdpSize,
-           struct hcand* cand,
-           size_t        candLen);
+sdpCandCat(char*                sdp,
+           size_t*              sdpSize,
+           const ICE_CANDIDATE* cand,
+           size_t               numcand);
 
 void
-parseSDP(char* sdp,
-         int   len);
+parseSDP(ICELIB_INSTANCE* icelib,
+         char*            sdp,
+         int              len);

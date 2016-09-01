@@ -100,10 +100,11 @@ inviteUser(client_state* state,
 
 
 void
-signalPathHandler(client_state* state,
-                  int           sockfd,
-                  char*         message,
-                  int           len)
+signalPathHandler(client_state*    state,
+                  ICELIB_INSTANCE* icelib,
+                  int              sockfd,
+                  char*            message,
+                  int              len)
 {
   char* delim = "\n:\\";
   char* tok   = strtok( (char*)message, delim );
@@ -177,7 +178,7 @@ signalPathHandler(client_state* state,
             int sdp_len = atoi(tok);
             /* Maybe some more sanyty cheking? */
             /* This does not work with partial messages and so on.. */
-            parseSDP(message + (len - sdp_len), len);
+            parseSDP(icelib, message + (len - sdp_len), len);
           }
         }
       }

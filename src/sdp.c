@@ -10,7 +10,7 @@
 
 
 char*
-sdp_candidate_toString(ICE_CANDIDATE* cand)
+sdp_candidate_toString(const ICE_CANDIDATE* cand)
 {
   char* x = NULL;
   char  addr_str[SOCKADDR_MAX_STRLEN];
@@ -28,19 +28,62 @@ sdp_candidate_toString(ICE_CANDIDATE* cand)
   return x;
 }
 
+char*
+sdp_cline_toString(const ICE_CANDIDATE* cand)
+{
+  char* x = NULL;
+  char  addr_str[SOCKADDR_MAX_STRLEN];
+  char  addr_type[4];
+  switch ( ( (struct sockaddr*)&cand->connectionAddr )->sa_family )
+  {
+  case AF_INET:
+    strncpy(addr_type, "IP4", 3);
+    break;
+  case AF_INET6:
+    strncpy(addr_type, "IP6", 3);
+    break;
+  }
+  asprintf(&x, "c=IN %s %s",
+           addr_type,
+           sockaddr_toString( (struct sockaddr*)&cand->connectionAddr,
+                              addr_str,
+                              sizeof(addr_str),
+                              false )
+           );
+  return x;
+}
+
 size_t
-sdpCandCat(char*         sdp,
-           size_t*       sdpSize,
-           struct hcand* cand,
-           size_t        candLen)
+sdpCandCat(char*                sdp,
+           size_t*              sdpSize,
+           const ICE_CANDIDATE* cand,
+           size_t               numcand)
 {
 
   size_t sdpEnd = strlen(sdp) + 1;
   size_t num    = 0;
-  for (size_t i = 0; i < candLen; i++)
+
+  /* Add C line */
+  char* c_line = sdp_cline_toString(&cand[0]);
+  if (c_line != NULL)
   {
+    size_t cline_len = strlen(c_line);
+    if (sdpEnd + cline_len > *sdpSize)
+    {
+      return 0;
+    }
+    /* memcpy(sdp[sdpEnd], sdp_cand, candLen +1); */
+    strcat(sdp, c_line);
+    strcat(sdp, "\n");
+    free(c_line);
+    num += cline_len;
+  }
+
+  for (size_t i = 0; i < numcand; i++)
+  {
+
     /* printhCandidate(&udp_cand[i]); */
-    char* sdp_cand = sdp_candidate_toString(&cand[i].ice);
+    char* sdp_cand = sdp_candidate_toString(&cand[i]);
     if (sdp_cand != NULL)
     {
       size_t cand_len = strlen(sdp_cand);
@@ -58,82 +101,155 @@ sdpCandCat(char*         sdp,
   return num;
 }
 
+
 void
-parseSDP(char* sdp,
-         int   len)
+parseAttr(ICELIB_INSTANCE* icelib,
+          char*            attr,
+          int              mediaidx)
+{
+  ICE_CANDIDATE ice_cand;
+  int           i = 0;
+  while (attr != NULL)
+  {
+    /* Break up the candidate line */
+    /* first is the foundation..Should be a string after ":"" */
+    switch (i)
+    {
+    case fond:
+      strncpy(ice_cand.foundation, strchr(attr, ':') + 1, 32);
+      break;
+    case compid:
+      ice_cand.componentid = atoi(attr);
+      break;
+    case trnsp:
+      if (strcmp(attr, "UDP") == 0)
+      {
+        ice_cand.transport = ICE_TRANS_UDP;
+      }
+      if (strcmp(attr, "TCP") == 0)
+      {
+        ice_cand.transport = ICE_TRANS_TCPACT;
+      }
+      break;
+    case priority:
+      ice_cand.priority = atoi(attr);
+      break;
+    case addr:
+      sockaddr_initFromString( (struct sockaddr*)&ice_cand.connectionAddr,
+                               attr );
+      break;
+    case port:
+      sockaddr_setPort( (struct sockaddr*)&ice_cand.connectionAddr,
+                        atoi(attr) );
+      break;
+    case type:
+      if (strcmp(attr, "host") == 0)
+      {
+        ice_cand.type = ICE_CAND_TYPE_HOST;
+
+      }
+      break;
+    default:
+      printf(" Attr Rest (%i): %s\n", i, attr);
+    }
+    attr = strtok(NULL, " ");
+    i++;
+  }
+
+  char ipaddr_str[SOCKADDR_MAX_STRLEN];
+  sockaddr_toString( (struct sockaddr*)&ice_cand.connectionAddr,
+                     ipaddr_str,
+                     SOCKADDR_MAX_STRLEN,
+                     false );
+
+  int32_t res = ICELIB_addRemoteCandidate(icelib,
+                                          mediaidx,
+                                          ice_cand.foundation,
+                                          strlen(ice_cand.foundation),
+                                          ice_cand.componentid,
+                                          ice_cand.priority,
+                                          ipaddr_str,
+                                          sockaddr_ipPort( (struct sockaddr*)&
+                                                           ice_cand.
+                                                           connectionAddr ),
+                                          ice_cand.transport,
+                                          ice_cand.type);
+  if (res == -1)
+  {
+    printf("Failed to add Remote candidates..\n");
+  }
+
+}
+
+
+void
+parseCline(ICELIB_INSTANCE* icelib,
+           char*            cline,
+           int32_t*         mediaidx)
+{
+  /* ICE_CANDIDATE ice_cand; */
+  struct sockaddr_storage ss;
+  int                     i = 0;
+  while (cline != NULL)
+  {
+    switch (i)
+    {
+    case nettype:
+      /* Ignore */
+      break;
+    case addrtype:
+      break;
+    case clineaddr:
+      sockaddr_initFromString( (struct sockaddr*)&ss,
+                               cline );
+      break;
+    default:
+      printf(" Cline Rest (%i): %s\n", i, cline);
+    }
+    cline = strtok(NULL, " ");
+    i++;
+  }
+
+  *mediaidx = ICELIB_addRemoteMediaStream(icelib,
+                                          "icebox\0",
+                                          "icebox\0",
+                                          (struct sockaddr*)&ss);
+}
+
+
+
+void
+parseSDP(ICELIB_INSTANCE* icelib,
+         char*            sdp,
+         int              len)
 {
   (void)len;
+  int32_t mediaidx = -1;
   printf("About to parse SDP---\n");
-  /* for (int i = 0; i < len; i++) */
-  /* { */
-  /*  printf("%c", sdp[i]); */
-  /* } */
-  /* Find the candidates.. */
+
   char*      string = sdp;
   const char delim  = '\n';
   char*      line   = strchr(string, delim);
   while (line != NULL)
   {
-    ICE_CANDIDATE ice_cand;
-    /* printf( " %s\n", tok ); */
     *line++ = '\0';
-    char* cand = strtok(string, " \n");
-    int   i    = 0;
-    while (cand != NULL)
+    char* attr = strtok(string, " \n");
+
+    if (strncmp(attr, "c=IN", 4) == 0)
     {
-      /* Break up the candidate line */
-      /* first is the foundation..Should be a string after ":"" */
-
-      switch (i)
-      {
-      case fond:
-        strncpy(ice_cand.foundation, strchr(cand, ':') + 1, 32);
-        break;
-      case compid:
-        ice_cand.componentid = atoi(cand);
-        break;
-      case trnsp:
-        if (strcmp(cand, "UDP") == 0)
-        {
-          ice_cand.transport = ICE_TRANS_UDP;
-        }
-        if (strcmp(cand, "TCP") == 0)
-        {
-          ice_cand.transport = ICE_TRANS_TCPACT;
-        }
-        break;
-      case priority:
-        ice_cand.priority = atoi(cand);
-        break;
-      case addr:
-        sockaddr_initFromString( (struct sockaddr*)&ice_cand.connectionAddr,
-                                 cand );
-        break;
-      case port:
-        sockaddr_setPort( (struct sockaddr*)&ice_cand.connectionAddr,
-                          atoi(cand) );
-        break;
-
-      case type:
-        if (strcmp(cand, "host") == 0)
-        {
-          ice_cand.type = ICE_CAND_TYPE_HOST;
-
-        }
-        break;
-      default:
-        printf(" Rest (%i): %s\n", i, cand);
-      }
-
-
-
-
-      cand = strtok(NULL, " ");
-      i++;
+      parseCline(icelib,
+                 attr,
+                 &mediaidx);
     }
-    char* cand_str = sdp_candidate_toString(&ice_cand);
-    printf("%s\n", cand_str);
-    free(cand_str);
+    if (strncmp(attr, "a=candidate", 11) == 0)
+    {
+      if (mediaidx != -1)
+      {
+        parseAttr(icelib,
+                  attr,
+                  mediaidx);
+      }
+    }
     string = line;
     line   = strchr(string, delim);
   }

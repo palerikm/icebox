@@ -1,5 +1,7 @@
 #pragma once
 
+#include <icelib.h>
+
 #define MAX_USER_LEN 128
 
 typedef enum {
@@ -9,16 +11,14 @@ typedef enum {
   INVITING,
 }client_state;
 
-struct prg_data {
-  client_state state;
-  char         user[MAX_USER_LEN];
-};
+
 
 void
-signalPathHandler(client_state* state,
-                  int           sockfd,
-                  char*         message,
-                  int           len);
+signalPathHandler(client_state*    state,
+                  ICELIB_INSTANCE* icelib,
+                  int              sockfd,
+                  char*            message,
+                  int              len);
 
 int
 inviteUser(client_state* state,
