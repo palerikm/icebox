@@ -323,64 +323,6 @@ main(int   argc,
                         NULL,
                         ICELIB_logDebug);
 
-  /* Harvest candidates.. */
-  struct hcand* udp_cand     = NULL;
-  int32_t       udp_cand_len = harvest_host(&udp_cand, SOCK_DGRAM);
-
-  struct hcand* tcp_cand     = NULL;
-  int32_t       tcp_cand_len = harvest_host(&tcp_cand, SOCK_STREAM);
-
-  /* Add the candidates to ICELIB */
-  uint32_t mediaidx = ICELIB_addLocalMediaStream(prg.icelib,
-                                                 42,
-                                                 42,
-                                                 ICE_CAND_TYPE_HOST);
-  for (int i = 0; i < udp_cand_len; i++)
-  {
-    /* TODO: set local pref based on iface */
-    ICELIB_addLocalCandidate(prg.icelib,
-                             mediaidx,
-                             1,
-                             (struct sockaddr*)&udp_cand[i].ice.connectionAddr,
-                             NULL,
-                             udp_cand->ice.transport,
-                             udp_cand->ice.type,
-                             0xffff);
-  }
-
-  for (int i = 0; i < tcp_cand_len; i++)
-  {
-    /* TODO: set local pref based on iface? */
-    ICELIB_addLocalCandidate(prg.icelib,
-                             mediaidx,
-                             1,
-                             (struct sockaddr*)&tcp_cand[i].ice.connectionAddr,
-                             NULL,
-                             tcp_cand->ice.transport,
-                             tcp_cand->ice.type,
-                             0xffff);
-  }
-  /* Info is now stored in icelib and local struct.. Fix? */
-
-  const ICE_MEDIA_STREAM* media =
-    ICELIB_getLocalMediaStream(prg.icelib,
-                               mediaidx);
-
-  size_t sdpSize = 4096;
-  char*  sdp     = calloc(sizeof(char), sdpSize);
-
-  if (sdpCandCat(sdp, &sdpSize,
-                 media->candidate, media->numberOfCandidates) == 0)
-  {
-    printf("Failed to write candidates to SDP. Too small buffer?\n");
-  }
-  /* if (sdpCandCat(sdp, &sdpSize, */
-  /*               tcp_cand, tcp_cand_len) == 0) */
-  /* { */
-  /*  printf("Failed to write TCP candidates to SDP. Too small buffer?\n"); */
-  /* } */
-
-  printf("SDP:\n%s\n", sdp);
 
 
   /* Signal path set up, time to gather the candidates */
@@ -418,12 +360,18 @@ main(int   argc,
     while (prg.state != REGISTERED)
     {
     }
+
+    char* sdp = NULL;
+    harvestAndCreateSDP(prg.icelib, &sdp);
     inviteUser(&prg.state, lconf.sigsock, argv[3], prg.user, sdp);
 
+    if (sdp != NULL)
+    {
+      free(sdp);
+    }
+
   }
-  free(sdp);
-  free(udp_cand);
-  free(tcp_cand);
+
 
   /* Just wait a bit for now.. */
   printf("About to sleep\n");

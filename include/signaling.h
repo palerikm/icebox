@@ -30,3 +30,7 @@ int
 registerUser(client_state* state,
              int           sockfd,
              char*         user_reg);
+
+void
+harvestAndCreateSDP(ICELIB_INSTANCE* icelib,
+                    char**           sdp);
