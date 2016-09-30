@@ -208,9 +208,6 @@ parseCline(char* cline,
       break;
     case clineaddr:
       strncpy(addr, cline, SOCKADDR_MAX_STRLEN);
-      /* printf("Cline: %s\n", cline); */
-      /* sockaddr_initFromString( addr, */
-      /*                         cline ); */
       break;
     default:
       printf(" Cline Rest (%i): %s\n", i, cline);
@@ -226,10 +223,7 @@ parseUfrag(char* uline,
 {
   (void)uline;
   (void)ufrag;
-  /* strncpy(ufrag, "haha", 4); */
-  /* strncpy(ufrag, strchr(uline, ':') + 1, ICE_MAX_UFRAG_LENGTH-1); */
   strcpy(ufrag, strchr(uline, ':') + 1);
-  /* uline = strtok(NULL, " "); */
 }
 
 void
@@ -237,7 +231,6 @@ parsePasswd(char* pline,
             char* passwd)
 {
   strcpy(passwd, strchr(pline, ':') + 1);
-  /* pline = strtok(NULL, " "); */
 }
 
 
