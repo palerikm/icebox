@@ -28,6 +28,8 @@ sdp_candidate_toString(const ICE_CANDIDATE* cand);
 size_t
 sdpCandCat(char*                sdp,
            size_t*              sdpSize,
+           const char*          ufrag,
+           const char*          passwd,
            const ICE_CANDIDATE* cand,
            size_t               numcand);
 

@@ -116,10 +116,11 @@ harvestAndCreateSDP(ICELIB_INSTANCE* icelib,
     ICELIB_addLocalCandidate(icelib,
                              mediaidx,
                              1,
+                             udp_cand[i].sockfd,
                              (struct sockaddr*)&udp_cand[i].ice.connectionAddr,
                              NULL,
-                             udp_cand->ice.transport,
-                             udp_cand->ice.type,
+                             udp_cand[i].ice.transport,
+                             udp_cand[i].ice.type,
                              0xffff);
   }
 
@@ -129,10 +130,11 @@ harvestAndCreateSDP(ICELIB_INSTANCE* icelib,
     ICELIB_addLocalCandidate(icelib,
                              mediaidx,
                              1,
+                             tcp_cand[i].sockfd,
                              (struct sockaddr*)&tcp_cand[i].ice.connectionAddr,
                              NULL,
-                             tcp_cand->ice.transport,
-                             tcp_cand->ice.type,
+                             tcp_cand[i].ice.transport,
+                             tcp_cand[i].ice.type,
                              0xffff);
   }
   /* Info is now stored in icelib and local struct.. Fix? */
@@ -145,6 +147,8 @@ harvestAndCreateSDP(ICELIB_INSTANCE* icelib,
   *sdp = calloc(sizeof(char), sdpSize);
 
   if (sdpCandCat(*sdp, &sdpSize,
+                 media->ufrag,
+                 media->passwd,
                  media->candidate, media->numberOfCandidates) == 0)
   {
     printf("Failed to write candidates to SDP. Too small buffer?\n");
@@ -217,6 +221,8 @@ handleOffer(ICELIB_INSTANCE* icelib,
           sdp = calloc(sizeof(char), sdpSize);
 
           if (sdpCandCat(sdp, &sdpSize,
+                         media->ufrag,
+                         media->passwd,
                          media->candidate, media->numberOfCandidates) == 0)
           {
             printf("Failed to write candidates to SDP. Too small buffer?\n");
@@ -301,8 +307,6 @@ handleAnswer(ICELIB_INSTANCE* icelib,
           /* Maybe some more sanyty cheking? */
           /* This does not work with partial messages and so on.. */
           parseSDP(icelib, message + (len - sdp_len), len);
-
-
         }
       }
     }
@@ -358,7 +362,7 @@ signalPathHandler(client_state*    state,
   }
   if (*state == INVITING)
   {
-    if (strncmp(tok, "100 Trying", 6) == 0)
+    if (strncmp(tok, "100 Trying", 10) == 0)
     {
       printf("Invitation recieved at notice server\n");
       return;
@@ -366,7 +370,8 @@ signalPathHandler(client_state*    state,
     if (strncmp(tok, "200 OK", 6) == 0)
     {
       printf("Got a 200 OK (Session Established..)\n");
-
+      handleAnswer(icelib, sockfd, message, len, tok);
+      ICELIB_Start(icelib, false);
     }
     else
     {
@@ -375,12 +380,16 @@ signalPathHandler(client_state*    state,
   }
   if (*state == REGISTERED)
   {
-    char* sdp = NULL;
-    harvestAndCreateSDP(icelib, &sdp);
-    handleOffer(icelib, sockfd, message, len, tok);
-    if (sdp != NULL)
+    if (strncmp(tok, "INVITE", 6) == 0)
     {
-      free(sdp);
+      char* sdp = NULL;
+      harvestAndCreateSDP(icelib, &sdp);
+      handleOffer(icelib, sockfd, message, len, tok);
+      ICELIB_Start(icelib, true);
+      if (sdp != NULL)
+      {
+        free(sdp);
+      }
     }
   }
 }

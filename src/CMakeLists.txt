@@ -12,6 +12,7 @@ if( OPENSSL_FOUND )
 endif( OPENSSL_FOUND )
 
 add_executable ( icebox
+                 media.c
                  sdp.c
                  candidate_harvester.c
                  signaling.c

@@ -77,26 +77,37 @@ store_cand(struct hcand** candidates,
               (struct sockaddr*)&cand[*numCand].ice.connectionAddr,
               addrsize);
 
-  strncpy(cand[*numCand].ifname, ifname, IFNAMSIZ);
-
-  cand[*numCand].sockfd = sockfd;
-  /* Set sockfd as foundation as well */
-  sprintf(cand[*numCand].ice.foundation, "%d", sockfd);
-
-  /* Somebody should set this priority later */
-  cand[*numCand].ice.priority = 0;
-
-  if (proto == SOCK_DGRAM)
+  if ( sockaddr_isAddrLinkLocal( (struct sockaddr*)&cand[*numCand].ice.
+                                 connectionAddr ) )
   {
-    cand[*numCand].ice.transport = ICE_TRANS_UDP;
+    close(sockfd);
+    return 0;
   }
-  if (proto == SOCK_STREAM)
+  else
   {
-    cand[*numCand].ice.transport = ICE_TRANS_TCPPASS;
+
+
+    strncpy(cand[*numCand].ifname, ifname, IFNAMSIZ);
+
+    cand[*numCand].sockfd = sockfd;
+    /* Set sockfd as foundation as well */
+    sprintf(cand[*numCand].ice.foundation, "%d", sockfd);
+
+    /* Somebody should set this priority later */
+    cand[*numCand].ice.priority = 0;
+
+    if (proto == SOCK_DGRAM)
+    {
+      cand[*numCand].ice.transport = ICE_TRANS_UDP;
+    }
+    if (proto == SOCK_STREAM)
+    {
+      cand[*numCand].ice.transport = ICE_TRANS_TCPPASS;
+    }
+    cand[*numCand].ice.type = ICE_CAND_TYPE_HOST;
+    (*numCand)++;
+    return *numCand;
   }
-  cand[*numCand].ice.type = ICE_CAND_TYPE_HOST;
-  (*numCand)++;
-  return *numCand;
 }
 
 

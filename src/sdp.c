@@ -56,6 +56,8 @@ sdp_cline_toString(const ICE_CANDIDATE* cand)
 size_t
 sdpCandCat(char*                sdp,
            size_t*              sdpSize,
+           const char*          ufrag,
+           const char*          passwd,
            const ICE_CANDIDATE* cand,
            size_t               numcand)
 {
@@ -78,6 +80,14 @@ sdpCandCat(char*                sdp,
     free(c_line);
     num += cline_len;
   }
+  /* Add username and password */
+  strcat(sdp, "a=ice-ufrag:");
+  strcat(sdp, ufrag);
+  strcat(sdp, "\n");
+  strcat(sdp, "a=ice-passwd:");
+  strcat(sdp, passwd);
+  strcat(sdp, "\n");
+
 
   for (size_t i = 0; i < numcand; i++)
   {
@@ -183,13 +193,10 @@ parseAttr(ICELIB_INSTANCE* icelib,
 
 
 void
-parseCline(ICELIB_INSTANCE* icelib,
-           char*            cline,
-           int32_t*         mediaidx)
+parseCline(char* cline,
+           char* addr)
 {
-  /* ICE_CANDIDATE ice_cand; */
-  struct sockaddr_storage ss;
-  int                     i = 0;
+  int i = 0;
   while (cline != NULL)
   {
     switch (i)
@@ -200,8 +207,10 @@ parseCline(ICELIB_INSTANCE* icelib,
     case addrtype:
       break;
     case clineaddr:
-      sockaddr_initFromString( (struct sockaddr*)&ss,
-                               cline );
+      strncpy(addr, cline, SOCKADDR_MAX_STRLEN);
+      /* printf("Cline: %s\n", cline); */
+      /* sockaddr_initFromString( addr, */
+      /*                         cline ); */
       break;
     default:
       printf(" Cline Rest (%i): %s\n", i, cline);
@@ -209,12 +218,28 @@ parseCline(ICELIB_INSTANCE* icelib,
     cline = strtok(NULL, " ");
     i++;
   }
-
-  *mediaidx = ICELIB_addRemoteMediaStream(icelib,
-                                          "icebox\0",
-                                          "icebox\0",
-                                          (struct sockaddr*)&ss);
 }
+
+void
+parseUfrag(char* uline,
+           char* ufrag)
+{
+  (void)uline;
+  (void)ufrag;
+  /* strncpy(ufrag, "haha", 4); */
+  /* strncpy(ufrag, strchr(uline, ':') + 1, ICE_MAX_UFRAG_LENGTH-1); */
+  strcpy(ufrag, strchr(uline, ':') + 1);
+  /* uline = strtok(NULL, " "); */
+}
+
+void
+parsePasswd(char* pline,
+            char* passwd)
+{
+  strcpy(passwd, strchr(pline, ':') + 1);
+  /* pline = strtok(NULL, " "); */
+}
+
 
 
 
@@ -225,7 +250,15 @@ parseSDP(ICELIB_INSTANCE* icelib,
 {
   (void)len;
   int32_t mediaidx = -1;
-  printf("About to parse SDP---\n");
+  char    addr_str[SOCKADDR_MAX_STRLEN];
+  char    ufrag[ICELIB_UFRAG_LENGTH];
+  char    passwd[ICE_MAX_FOUNDATION_LENGTH];
+
+  bool foundCline  = false;
+  bool foundUfrag  = false;
+  bool foundPasswd = false;
+
+  printf("About to parse SDP--- (%i)\n", mediaidx);
 
   char*      string = sdp;
   const char delim  = '\n';
@@ -237,10 +270,23 @@ parseSDP(ICELIB_INSTANCE* icelib,
 
     if (strncmp(attr, "c=IN", 4) == 0)
     {
-      parseCline(icelib,
-                 attr,
-                 &mediaidx);
+      char addr[SOCKADDR_MAX_STRLEN];
+      parseCline(attr,
+                 addr);
+      foundCline = true;
+      strncpy(addr_str, addr, SOCKADDR_MAX_STRLEN);
     }
+    if (strncmp(attr, "a=ice-ufrag:", 12) == 0)
+    {
+      parseUfrag(attr, ufrag);
+      foundUfrag = true;
+    }
+    if (strncmp(attr, "a=ice-passwd:", 13) == 0)
+    {
+      parsePasswd(attr, passwd);
+      foundPasswd = true;
+    }
+
     if (strncmp(attr, "a=candidate", 11) == 0)
     {
       if (mediaidx != -1)
@@ -252,6 +298,16 @@ parseSDP(ICELIB_INSTANCE* icelib,
     }
     string = line;
     line   = strchr(string, delim);
-  }
+    if ( foundCline && foundUfrag && foundPasswd && (mediaidx == -1) )
+    {
+      struct sockaddr_storage ss;
+      sockaddr_initFromString( (struct sockaddr*)&ss,
+                               addr_str );
 
+      mediaidx = ICELIB_addRemoteMediaStream(icelib,
+                                             ufrag,
+                                             passwd,
+                                             (struct sockaddr*)&ss);
+    }
+  }
 }
