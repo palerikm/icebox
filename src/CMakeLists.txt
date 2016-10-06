@@ -11,6 +11,11 @@ if( OPENSSL_FOUND )
   list(APPEND ADDITIONAL_LIBS ${OPENSSL_LIBRARIES})
 endif( OPENSSL_FOUND )
 
+# Todo fix propper library discovery.
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+   list(APPEND ADDITIONAL_LIBS "bsd")
+endif()
+
 add_executable ( icebox
                  media.c
                  sdp.c

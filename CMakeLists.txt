@@ -4,6 +4,7 @@
 
 ## prepare CMAKE
 cmake_minimum_required ( VERSION 3.2.0 )
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 
 set ( ICEBOX_VERSION_MAJOR "0" CACHE STRING "Project major version number")
 set ( ICEBOX_VERSION_MINOR "1" CACHE STRING "Project minor version number" )
