@@ -2,6 +2,7 @@
 
 #include <icelib.h>
 
+#include "media.h"
 #define MAX_USER_LEN 128
 
 typedef enum {
@@ -15,7 +16,7 @@ typedef enum {
 
 void
 signalPathHandler(client_state*    state,
-                  ICELIB_INSTANCE* icelib,
+                  struct mediaConfig* mconf,
                   int              sockfd,
                   char*            message,
                   int              len);

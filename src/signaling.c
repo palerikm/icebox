@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #include "sdp.h"
+
 #include "signaling.h"
 
 int
@@ -90,7 +91,6 @@ inviteUser(client_state* state,
     perror("inviteUser: send");
     return -1;
   }
-  printf("Sendt: %i\n", numbytes);
   return 1;
 }
 
@@ -338,11 +338,11 @@ handleAnswer(ICELIB_INSTANCE* icelib,
 }
 
 void
-signalPathHandler(client_state*    state,
-                  ICELIB_INSTANCE* icelib,
-                  int              sockfd,
-                  char*            message,
-                  int              len)
+signalPathHandler(client_state*       state,
+                  struct mediaConfig* mconf,
+                  int                 sockfd,
+                  char*               message,
+                  int                 len)
 {
 
   char* delim = "\n:\\";
@@ -370,8 +370,8 @@ signalPathHandler(client_state*    state,
     if (strncmp(tok, "200 OK", 6) == 0)
     {
       printf("Got a 200 OK (Session Established..)\n");
-      handleAnswer(icelib, sockfd, message, len, tok);
-      ICELIB_Start(icelib, false);
+      handleAnswer(mconf->icelib, sockfd, message, len, tok);
+      ICELIB_Start(mconf->icelib, false);
     }
     else
     {
@@ -383,9 +383,14 @@ signalPathHandler(client_state*    state,
     if (strncmp(tok, "INVITE", 6) == 0)
     {
       char* sdp = NULL;
-      harvestAndCreateSDP(icelib, &sdp);
-      handleOffer(icelib, sockfd, message, len, tok);
-      ICELIB_Start(icelib, true);
+      harvestAndCreateSDP(mconf->icelib, &sdp);
+      /* Start to listen here... */
+      pthread_create(&mconf->mSocketListenThread,
+                     NULL,
+                     mSocketListen,
+                     (void*)mconf);
+      handleOffer(mconf->icelib, sockfd, message, len, tok);
+      ICELIB_Start(mconf->icelib, true);
       if (sdp != NULL)
       {
         free(sdp);

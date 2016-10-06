@@ -18,22 +18,20 @@
 #include <pthread.h>
 
 #include <turnclient.h>
+#include <stunserver.h>
 #include <sockaddr_util.h>
 
 #include <icelib.h>
-#include <stunclient.h>
 
+
+#include "defines.h"
 #include "signaling.h"
 #include "sockethelper.h"
 #include "candidate_harvester.h"
 #include "sdp.h"
 #include "media.h"
 
-#define SERVERPORT "5061" /* the port client will be connecting to */
-#define MAXBUFLEN 4096
-#define MAXDATASIZE 200 /* max number of bytes we can get at once */
 
-#define STUNPORT "3478"    /* the port users will be connecting to */
 
 
 /* static const uint32_t TEST_THREAD_CTX = 1; */
@@ -41,8 +39,6 @@
 
 struct prg_data {
   client_state        state;
-  ICELIB_INSTANCE*    icelib;
-  STUN_CLIENT_DATA*   stunInstance;
   struct mediaConfig* mediaCnf;
   char                user[MAX_USER_LEN];
 };
@@ -53,15 +49,16 @@ struct sigListenConfig {
   /* Signaling socket.. */
   int sigsock;
   /* "Media" socket */
+  struct mediaConfig* mconf;
   /* TURN_INSTANCE_DATA* turnInst; */
   /* int                 msock; */
 
-  /*Handles normal data like RTP etc */
-  void (* signal_path_handler)(client_state*    state,
-                               ICELIB_INSTANCE* pInstance,
-                               int              sockfd,
+
+  void (* signal_path_handler)(client_state*       state,
+                               struct mediaConfig* mconf,
+                               int                 sockfd,
                                char*,
-                               int              buflen);
+                               int                 buflen);
 };
 
 void
@@ -74,7 +71,17 @@ ICELIB_printLog(void*           pUserData,
   (void)str;
   printf("%s\n", str);
 }
+void
+stunLog(void*              userData,
+        StunInfoCategory_T category,
+        char*              ErrStr)
+{
+  (void) userData;
+  (void) category;
+  printf("%s", ErrStr);
 
+
+}
 void*
 sigSocketListen(void* ptr)
 {
@@ -126,7 +133,7 @@ sigSocketListen(void* ptr)
         /* if (i == 0) */
         /* { */
         lconfig->signal_path_handler(&lconfig->prg->state,
-                                     lconfig->prg->icelib,
+                                     lconfig->prg->mediaCnf,
                                      ufds[0].fd,
                                      (char*)buf,
                                      numbytes);
@@ -268,10 +275,23 @@ static void
 stunStatusCallBack(void*               ctx,
                    StunCallBackData_T* retData)
 {
-  (void)ctx;
-  (void)retData;
-  /* printf("Got STUN status callback\n");// (Result (%i)\n",
-   * retData->stunResult); */
+  struct mediaConfig* mconfig = ( (struct prg_data*)ctx )->mediaCnf;
+  if (retData->stunResult == StunResult_BindOk)
+  {
+    ICELIB_incomingBindingResponse(mconfig->icelib,
+                                   200,
+                                   retData->msgId,
+                                   (const struct sockaddr*)&retData->srcAddr,
+                                   (const struct sockaddr*)&retData->dstBaseAddr,
+                                   (const struct sockaddr*)&retData->rflxAddr);
+
+  }
+  else
+  {
+    printf("Got STUN status callback (TODO: handle this)\n");/* (Result (%i)\n",
+                                                              * */
+  }
+  /* * retData->stunResult); * / */
 }
 
 
@@ -336,6 +356,142 @@ turnCbFunc(void*               userCtx,
 }
 
 ICELIB_Result
+sendConnectivityResp(void*                  pUserData,
+                     uint32_t               userValue1,
+                     uint32_t               userValue2,
+                     uint32_t               componentId,
+                     int                    sockfd,
+                     int                    proto,
+                     const struct sockaddr* source,
+                     const struct sockaddr* destination,
+                     const struct sockaddr* MappedAddress,
+                     uint16_t               errorResponse,
+                     StunMsgId              transactionId,
+                     bool                   useRelay,
+                     const char*            pPasswd)
+{
+  (void)userValue1;
+  (void)userValue2;
+  (void)componentId;
+  (void)source;
+  (void)destination;
+  StunMessage stunMsg;
+  CreateConnectivityBindingResp(&stunMsg,
+                                transactionId,
+                                MappedAddress,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                0,
+                                (errorResponse ==
+                                 200) ? STUN_MSG_BindResponseMsg :
+                                STUN_MSG_BindErrorResponseMsg,
+                                errorResponse);
+
+
+  /* encode */
+  uint8_t stunBuff[STUN_MAX_PACKET_SIZE];
+  int     stunLen = stunlib_encodeMessage(&stunMsg,
+                                          (uint8_t*)stunBuff,
+                                          STUN_MAX_PACKET_SIZE,
+                                          (unsigned char*)pPasswd,   /* md5key
+                                                                     **/
+                                          pPasswd ? strlen(pPasswd) : 0, /*
+                                                                          * keyLen
+                                                                          **/
+                                          NULL);
+  if (!stunLen)
+  {
+    printf("Failed to encode STUN msg\n");
+    exit(1);
+  }
+
+
+  sendPacket(pUserData,
+             sockfd,
+             stunBuff,
+             stunLen,
+             destination,
+             proto,
+             useRelay,
+             0);
+  return 0;
+
+}
+
+
+ICELIB_Result
+nominated(void*                  pUserData,
+          uint32_t               userValue1,
+          uint32_t               userValue2,
+          uint32_t               componentId,
+          uint64_t               priority,
+          int32_t                proto,
+          const struct sockaddr* local,
+          const struct sockaddr* remote)
+{
+  (void)pUserData;
+  (void)userValue1;
+  (void)userValue2;
+  (void)componentId;
+  (void)priority;
+  (void) proto;
+  (void)local;
+  (void) remote;
+
+  printf("*******  Nominated ********* (TODO: Handle this)\n");
+  return 0;
+}
+
+ICELIB_Result
+cancelSTUNtrans(void*     pUserData,
+                uint32_t  userValue1,
+                StunMsgId transactionId)
+{
+  (void) pUserData;
+  (void) userValue1;
+  (void) transactionId;
+  printf("Cancel STUN transaction!\n");
+  return 0;
+}
+ICELIB_Result
+complete(void*        pUserData,
+         unsigned int userval1,
+         bool         controlling,
+         bool         failed)
+{
+  (void) userval1;
+  (void) controlling;
+  (void) failed;
+  struct prg_data* prg = pUserData;
+
+  const ICE_CANDIDATE* lcand =
+    ICELIB_getActiveCandidate(prg->mediaCnf->icelib,
+                              0,
+                              1);
+
+  const ICE_REMOTE_CANDIDATES* rcand =
+    ICELIB_getActiveRemoteCandidates(prg->mediaCnf->icelib,
+                                     0);
+  char laddr[SOCKADDR_MAX_STRLEN];
+  char raddr[SOCKADDR_MAX_STRLEN];
+  sockaddr_toString( (const struct sockaddr*)&lcand->connectionAddr,
+                     laddr,
+                     sizeof(laddr),
+                     true );
+  sockaddr_toString(
+     (const struct sockaddr*)&rcand->remoteCandidate[0].connectionAddr,
+    raddr,
+    sizeof(raddr),
+    true );
+  printf("Media Path: %s  -> %s\n", laddr, raddr);
+  printf("******** Complete ********* (TODO: Handle this)\n");
+  return 0;
+}
+
+ICELIB_Result
 sendConnectivityCheck(void*                  pUserData,
                       int                    proto,
                       int                    socket,
@@ -373,8 +529,8 @@ sendConnectivityCheck(void*                  pUserData,
   transAttr.tieBreaker     = tieBreaker;
 
   /* kick off stun */
-  int32_t ret =  StunClient_startBindTransaction(prg->stunInstance,
-                                                 NULL,
+  int32_t ret =  StunClient_startBindTransaction(prg->mediaCnf->stunInstance,
+                                                 pUserData,
                                                  destination,
                                                  source,
                                                  proto,
@@ -438,6 +594,7 @@ main(int   argc,
 {
   struct prg_data        prg;
   struct sigListenConfig lconf;
+  /* struct mediaConfig     mconf; */
   /* struct addrinfo     servinfo, * p; */
 
   /* Intializes random number generator */
@@ -445,9 +602,12 @@ main(int   argc,
   srand( (unsigned) time(&t) );
 
   /* struct sockaddr_storage taddr; */
+  /* Set up the pointer(s).. */
   lconf.prg = &prg;
+  /* lconf.mconf = &mconf; */
 
   pthread_t sigSocketListenThread;
+
   pthread_t stunTickThread;
   pthread_t iceTickThread;
   /* pthread_t turnTickThread; */
@@ -491,21 +651,39 @@ main(int   argc,
   iceConfig.logLevel             = ICELIB_logDebug;
   /* iceConfig.logLevel = ICELIB_logDisable; */
 
-  prg.icelib = malloc( sizeof(ICELIB_INSTANCE) );
+  prg.mediaCnf->icelib = malloc( sizeof(ICELIB_INSTANCE) );
 
-  ICELIB_Constructor(prg.icelib,
+  ICELIB_Constructor(prg.mediaCnf->icelib,
                      &iceConfig);
 
-  ICELIB_setCallbackLog(prg.icelib,
-                        ICELIB_printLog,
-                        NULL,
-                        ICELIB_logDebug);
+  /* ICELIB_setCallbackLog(mconf.icelib, */
+  /*                      ICELIB_printLog, */
+  /*                      NULL, */
+  /*                      ICELIB_logDebug); */
 
-  ICELIB_setCallbackOutgoingBindingRequest(prg.icelib,
+  ICELIB_setCallbackOutgoingBindingRequest(prg.mediaCnf->icelib,
                                            sendConnectivityCheck,
                                            &prg);
+
+  ICELIB_setCallbackOutgoingBindingResponse(prg.mediaCnf->icelib,
+                                            sendConnectivityResp,
+                                            &prg);
+  ICELIB_setCallbackConnecitivityChecksComplete(prg.mediaCnf->icelib,
+                                                complete,
+                                                &prg);
+  ICELIB_setCallbackNominated(prg.mediaCnf->icelib,
+                              nominated,
+                              &prg);
+  ICELIB_setCallbackOutgoingCancelRequest(prg.mediaCnf->icelib,
+                                          cancelSTUNtrans,
+                                          &prg);
+
   /* Setup stun */
-  StunClient_Alloc(&prg.stunInstance);
+  StunClient_Alloc(&prg.mediaCnf->stunInstance);
+
+  /* StunClient_RegisterLogger(prg.mediaCnf->stunInstance, */
+  /*                          stunLog, */
+  /*                          &prg); */
 
   /* Signal path set up, time to gather the candidates */
   /* Turn setup */
@@ -534,8 +712,9 @@ main(int   argc,
 
 
   /* pthread_create(&turnTickThread, NULL, tickTurn, (void*)lconf.turnInst); */
-  pthread_create(&stunTickThread, NULL, tickStun, (void*)prg.stunInstance);
-  pthread_create(&iceTickThread,  NULL, tickIce,  (void*)prg.icelib);
+  pthread_create(&stunTickThread, NULL, tickStun,
+                 (void*)prg.mediaCnf->stunInstance);
+  pthread_create(&iceTickThread,  NULL, tickIce, (void*)prg.mediaCnf->icelib);
 
   if (argc == 4)
   {
@@ -545,7 +724,10 @@ main(int   argc,
     }
 
     char* sdp = NULL;
-    harvestAndCreateSDP(prg.icelib, &sdp);
+    harvestAndCreateSDP(prg.mediaCnf->icelib, &sdp);
+    /* Start to listen here.. */
+    pthread_create(&prg.mediaCnf->mSocketListenThread, NULL, mSocketListen,
+                   (void*)prg.mediaCnf);
     inviteUser(&prg.state, lconf.sigsock, argv[3], prg.user, sdp);
 
     if (sdp != NULL)
@@ -560,7 +742,7 @@ main(int   argc,
   printf("About to sleep\n");
   sleep(100);
   close(lconf.sigsock);
-  StunClient_free(prg.stunInstance);
+  StunClient_free(prg.mediaCnf->stunInstance);
 
   return 0;
 }
