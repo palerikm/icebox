@@ -67,7 +67,7 @@ if ( CMAKE_C_COMPILER_ID STREQUAL "GNU" OR
   message ( STATUS "adding GCC/Clang options ")
   add_definitions ( -std=gnu99 -Wall -Wextra -pedantic )
   ## disable VLA "is a GNU extension" warning
-  add_definitions ( -Wno-gnu-zero-variadic-macro-arguments )
+  ##add_definitions ( -Wno-gnu-zero-variadic-macro-arguments )
   if ( fatal_warnings )
     add_definitions ( -Werror )
   endif ()
