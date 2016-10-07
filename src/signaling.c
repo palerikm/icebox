@@ -1,7 +1,9 @@
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <string.h>
+#ifdef LINUX
 #include <bsd/string.h>
+#endif
 #include <sys/socket.h>
 #include <ctype.h>
 #include <stdlib.h>
