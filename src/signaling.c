@@ -113,8 +113,14 @@ harvestAndCreateSDP(ICELIB_INSTANCE* icelib,
                                                  42,
                                                  42,
                                                  ICE_CAND_TYPE_HOST);
+
+  uint16_t local_pri = 0xffff;
   for (int i = 0; i < udp_cand_len; i++)
   {
+    uint16_t penalty = 0;
+    if(udp_cand[i].ice.connectionAddr.ss_family == AF_INET){
+      penalty = 1000;
+    }
     /* TODO: set local pref based on iface */
     ICELIB_addLocalCandidate(icelib,
                              mediaidx,
@@ -124,11 +130,15 @@ harvestAndCreateSDP(ICELIB_INSTANCE* icelib,
                              NULL,
                              udp_cand[i].ice.transport,
                              udp_cand[i].ice.type,
-                             0xffff);
+                             local_pri-penalty-i);
   }
 
   for (int i = 0; i < tcp_cand_len; i++)
   {
+    uint16_t penalty = 0;
+    if(udp_cand[i].ice.connectionAddr.ss_family == AF_INET){
+      penalty = 1000;
+    }
     /* TODO: set local pref based on iface? */
     ICELIB_addLocalCandidate(icelib,
                              mediaidx,
@@ -138,7 +148,7 @@ harvestAndCreateSDP(ICELIB_INSTANCE* icelib,
                              NULL,
                              tcp_cand[i].ice.transport,
                              tcp_cand[i].ice.type,
-                             0xffff);
+                             local_pri-penalty-i);
   }
   /* Info is now stored in icelib and local struct.. Fix? */
 

@@ -160,6 +160,7 @@ harvest_host(struct hcand** candidates,
           perror("createSocket: socket");
           continue;
         }
+
         socklen_t addrsize =
           (family ==
            AF_INET6) ? sizeof(struct sockaddr_in6) : sizeof(struct sockaddr_in);
