@@ -594,6 +594,8 @@ main(int   argc,
 {
   struct prg_data        prg;
   struct sigListenConfig lconf;
+
+  prg.mediaCnf = malloc(sizeof(struct mediaConfig));
   /* struct mediaConfig     mconf; */
   /* struct addrinfo     servinfo, * p; */
 
@@ -650,9 +652,8 @@ main(int   argc,
   iceConfig.iceLite              = false;
   iceConfig.logLevel             = ICELIB_logDebug;
   /* iceConfig.logLevel = ICELIB_logDisable; */
-
+  
   prg.mediaCnf->icelib = malloc( sizeof(ICELIB_INSTANCE) );
-
   ICELIB_Constructor(prg.mediaCnf->icelib,
                      &iceConfig);
 
@@ -677,7 +678,6 @@ main(int   argc,
   ICELIB_setCallbackOutgoingCancelRequest(prg.mediaCnf->icelib,
                                           cancelSTUNtrans,
                                           &prg);
-
   /* Setup stun */
   StunClient_Alloc(&prg.mediaCnf->stunInstance);
 
@@ -715,7 +715,7 @@ main(int   argc,
   pthread_create(&stunTickThread, NULL, tickStun,
                  (void*)prg.mediaCnf->stunInstance);
   pthread_create(&iceTickThread,  NULL, tickIce, (void*)prg.mediaCnf->icelib);
-
+  
   if (argc == 4)
   {
     /* Ok got nothing better to do. Busywaiting */
@@ -743,6 +743,6 @@ main(int   argc,
   sleep(100);
   close(lconf.sigsock);
   StunClient_free(prg.mediaCnf->stunInstance);
-
+  free(prg.mediaCnf);
   return 0;
 }

@@ -149,7 +149,7 @@ harvest_host(struct hcand** candidates,
       if (s != 0)
       {
         printf( "getnameinfo() failed: %s\n", gai_strerror(s) );
-        exit(EXIT_FAILURE);
+        //exit(EXIT_FAILURE);
       }
       /* Ignore loopback */
       if ( 0 != strncmp("lo", ifa->ifa_name, 2) )
