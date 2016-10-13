@@ -2,13 +2,15 @@
 
 #pragma once
 
-int
-createUdpSocket(char              host[],
-                char              port[],
-                char              outprintName[],
-                int               ai_flags,
-                struct addrinfo*  servinfo,
-                struct addrinfo** p);
+int sendall(int s, char *buf, int *len);
+
+//int
+//createUdpSocket(char              host[],
+//                char              port[],
+//                char              outprintName[],
+//                int               ai_flags,
+//                struct addrinfo*  servinfo,
+//                struct addrinfo** p);
 
 int
 createTcpSocket(char* dst,

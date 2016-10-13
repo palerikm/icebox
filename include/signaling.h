@@ -12,10 +12,15 @@ typedef enum {
   INVITING,
 }client_state;
 
+struct sig_data{
+  client_state        state;
+  size_t msgBufSize;
+  char *msgBuf;
+};
 
 
 void
-signalPathHandler(client_state*    state,
+signalPathHandler(struct sig_data*    sData,
                   struct mediaConfig* mconf,
                   int              sockfd,
                   char*            message,

@@ -10,6 +10,7 @@
 
 #include "sdp.h"
 
+#include "sockethelper.h"
 #include "signaling.h"
 
 int
@@ -25,7 +26,7 @@ registerUser(client_state* state,
 
   strncpy(str,"REGISTER ", 255);
   strlcat(str, user_reg, 245);
-
+  strlcat(str, "\n", 245);
   if ( ( numbytes = send(sockfd, str,strlen(str), 0) ) == -1 )
   {
     perror("registerUser: send");
@@ -58,7 +59,7 @@ inviteUser(client_state* state,
            char*         from,
            char*         sdp)
 {
-  int  numbytes;
+  //int  numbytes;
   char str[4096];
   memset(str, 0, sizeof str);
 
@@ -88,12 +89,18 @@ inviteUser(client_state* state,
   strlcat( str, "\r\n",  sizeof(str) );
 
   strlcat( str, sdp,     sizeof(str) );
+  strlcat( str, "\n",    sizeof(str) );
   printf("Sending invite\n%s\n", str);
-  if ( ( numbytes = send(sockfd, str,strlen(str), 0) ) == -1 )
-  {
-    perror("inviteUser: send");
-    return -1;
-  }
+  int msglen = strlen(str);
+  if (sendall(sockfd, str, &msglen) == -1) {
+  perror("sendall");
+  printf("We only sent %d bytes because of the error!\n", msglen);
+}
+//  if ( ( numbytes = send(sockfd, str,strlen(str), 0) ) == -1 )
+  //{
+    //perror("inviteUser: send");
+    //return -1;
+  //}
   return 1;
 }
 
@@ -157,7 +164,7 @@ harvestAndCreateSDP(ICELIB_INSTANCE* icelib,
                                mediaidx);
 
   size_t sdpSize = 4096;
-  *sdp = calloc(sizeof(char), sdpSize);
+  *sdp = calloc(sdpSize, sizeof(char));
 
   if (sdpCandCat(*sdp, &sdpSize,
                  media->ufrag,
@@ -187,7 +194,7 @@ handleOffer(ICELIB_INSTANCE* icelib,
   char* sdp   = NULL;
   if (strncmp(tok, "INVITE", 6) == 0)
   {
-    int  numbytes;
+    //int  numbytes;
     char str[4096];
     char str_to[128];
     char str_from[128];
@@ -224,7 +231,7 @@ handleOffer(ICELIB_INSTANCE* icelib,
           int sdp_len = atoi(tok);
           /* Maybe some more sanyty cheking? */
           /* This does not work with partial messages and so on.. */
-          parseSDP(icelib, message + (len - sdp_len), len);
+          parseSDP(icelib, message + (len - sdp_len-1), len);
           /* Ok, so now we send our local candidate back in the 200 Ok */
           const ICE_MEDIA_STREAM* media =
             ICELIB_getLocalMediaStream(icelib,
@@ -263,11 +270,15 @@ handleOffer(ICELIB_INSTANCE* icelib,
     }
 
     printf("Sending 200OK\n%s\n", str);
-
-    if ( ( numbytes = send(sockfd, str,strlen(str), 0) ) == -1 )
-    {
-      perror("200Ok: send");
-    }
+    int len = strlen(str);
+    if (sendall(sockfd, str, &len) == -1) {
+    perror("sendall");
+    printf("We only sent %d bytes because of the error!\n", len);
+  }
+  //  if ( ( numbytes = sendall(sockfd, str, &len ) == -1 )
+  //  {
+  //    perror("200Ok: send");
+  //  }
   }
 }
 
@@ -282,7 +293,7 @@ handleAnswer(ICELIB_INSTANCE* icelib,
   char* sdp   = NULL;
   if (strncmp(tok, "200 OK", 6) == 0)
   {
-    int  numbytes;
+    //int  numbytes;
     char str[4096];
     char str_to[128];
     char str_from[128];
@@ -342,56 +353,71 @@ handleAnswer(ICELIB_INSTANCE* icelib,
     }
 
     printf("Sending 200OK\n%s\n", str);
-
-    if ( ( numbytes = send(sockfd, str,strlen(str), 0) ) == -1 )
-    {
-      perror("200Ok: send");
-    }
+    int len = strlen(str);
+    if (sendall(sockfd, str, &len) == -1) {
+    perror("sendall");
+    printf("We only sent %d bytes because of the error!\n", len);
+  }
+  //  if ( ( numbytes = send(sockfd, str,strlen(str), 0) ) == -1 )
+    //{
+      //perror("200Ok: send");
+    //}
   }
 }
 
 void
-signalPathHandler(client_state*       state,
+signalPathHandler(struct sig_data*    sData,
                   struct mediaConfig* mconf,
                   int                 sockfd,
-                  char*               message,
+                  char*               msg,
                   int                 len)
 {
+  char* tmp = reallocf(sData->msgBuf, len+sData->msgBufSize);
+
+  if(!tmp){
+    printf("Can not allocate memory for incomming message\n");
+    exit(1);
+  }
+
+  sData->msgBuf = tmp;
+
+  memcpy(sData->msgBuf+sData->msgBufSize, msg, len);
+  sData->msgBufSize+=len;
 
   char* delim = "\n:\\";
-  char* tok   = strtok( (char*)message, delim );
+  char* tok   = strtok( sData->msgBuf, delim );
 
-  if (*state == REGISTERING)
+  if (sData->state == REGISTERING)
   {
     if (strncmp(tok, "200 OK", 6) == 0)
     {
       printf("Registered\n");
-      *state = REGISTERED;
+      sData->state = REGISTERED;
     }
     else
     {
-      printf("Registration failed with %s\n", message);
+      printf("Registration failed with %s\n", sData->msgBuf);
     }
   }
-  if (*state == INVITING)
+  if (sData->state == INVITING)
   {
     if (strncmp(tok, "100 Trying", 10) == 0)
     {
       printf("Invitation recieved at notice server\n");
-      return;
+      //return;
     }
     if (strncmp(tok, "200 OK", 6) == 0)
     {
       printf("Got a 200 OK (Session Established..)\n");
-      handleAnswer(mconf->icelib, sockfd, message, len, tok);
+      handleAnswer(mconf->icelib, sockfd, sData->msgBuf, len, tok);
       ICELIB_Start(mconf->icelib, false);
     }
     else
     {
-      printf("Invitation failed with %s\n", message);
+      printf("Invitation failed with %s\n", sData->msgBuf);
     }
   }
-  if (*state == REGISTERED)
+  if (sData->state == REGISTERED)
   {
     if (strncmp(tok, "INVITE", 6) == 0)
     {
@@ -402,12 +428,20 @@ signalPathHandler(client_state*       state,
                      NULL,
                      mSocketListen,
                      (void*)mconf);
-      handleOffer(mconf->icelib, sockfd, message, len, tok);
+      printf("Handling Offer\n");
+      handleOffer(mconf->icelib, sockfd, sData->msgBuf, len, tok);
+      printf("Starting ICE\n");
       ICELIB_Start(mconf->icelib, true);
-      if (sdp != NULL)
+      if (!sdp)
       {
         free(sdp);
       }
     }
   }
+
+if(!sData->msgBuf){
+  free(sData->msgBuf);
+  sData->msgBuf = NULL;
+}
+sData->msgBufSize=0;
 }

@@ -38,7 +38,7 @@
 
 
 struct prg_data {
-  client_state        state;
+  struct sig_data*    sigData;
   struct mediaConfig* mediaCnf;
   char                user[MAX_USER_LEN];
 };
@@ -54,7 +54,7 @@ struct sigListenConfig {
   /* int                 msock; */
 
 
-  void (* signal_path_handler)(client_state*       state,
+  void (* signal_path_handler)(struct sig_data*    sData,
                                struct mediaConfig* mconf,
                                int                 sockfd,
                                char*,
@@ -132,7 +132,7 @@ sigSocketListen(void* ptr)
         /* Signal path */
         /* if (i == 0) */
         /* { */
-        lconfig->signal_path_handler(&lconfig->prg->state,
+        lconfig->signal_path_handler(lconfig->prg->sigData,
                                      lconfig->prg->mediaCnf,
                                      ufds[0].fd,
                                      (char*)buf,
@@ -594,8 +594,8 @@ main(int   argc,
 {
   struct prg_data        prg;
   struct sigListenConfig lconf;
-
-  prg.mediaCnf = malloc(sizeof(struct mediaConfig));
+  prg.sigData = calloc(1, sizeof(struct sig_data));
+  prg.mediaCnf = calloc(1, sizeof(struct mediaConfig));
   /* struct mediaConfig     mconf; */
   /* struct addrinfo     servinfo, * p; */
 
@@ -641,7 +641,7 @@ main(int   argc,
 
   strncpy(prg.user, argv[2], MAX_USER_LEN);
 
-  registerUser(&prg.state, lconf.sigsock, prg.user);
+  registerUser(&prg.sigData->state, lconf.sigsock, prg.user);
 
   /* Setup ICE */
   ICELIB_CONFIGURATION iceConfig;
@@ -652,15 +652,15 @@ main(int   argc,
   iceConfig.iceLite              = false;
   iceConfig.logLevel             = ICELIB_logDebug;
   /* iceConfig.logLevel = ICELIB_logDisable; */
-  
+
   prg.mediaCnf->icelib = malloc( sizeof(ICELIB_INSTANCE) );
   ICELIB_Constructor(prg.mediaCnf->icelib,
                      &iceConfig);
 
-  /* ICELIB_setCallbackLog(mconf.icelib, */
-  /*                      ICELIB_printLog, */
-  /*                      NULL, */
-  /*                      ICELIB_logDebug); */
+  //ICELIB_setCallbackLog(prg.mediaCnf->icelib,
+  //                     ICELIB_printLog,
+  //                     NULL,
+  //                     ICELIB_logDebug);
 
   ICELIB_setCallbackOutgoingBindingRequest(prg.mediaCnf->icelib,
                                            sendConnectivityCheck,
@@ -715,11 +715,11 @@ main(int   argc,
   pthread_create(&stunTickThread, NULL, tickStun,
                  (void*)prg.mediaCnf->stunInstance);
   pthread_create(&iceTickThread,  NULL, tickIce, (void*)prg.mediaCnf->icelib);
-  
+
   if (argc == 4)
   {
     /* Ok got nothing better to do. Busywaiting */
-    while (prg.state != REGISTERED)
+    while (prg.sigData->state != REGISTERED)
     {
     }
 
@@ -728,7 +728,7 @@ main(int   argc,
     /* Start to listen here.. */
     pthread_create(&prg.mediaCnf->mSocketListenThread, NULL, mSocketListen,
                    (void*)prg.mediaCnf);
-    inviteUser(&prg.state, lconf.sigsock, argv[3], prg.user, sdp);
+    inviteUser(&prg.sigData->state, lconf.sigsock, argv[3], prg.user, sdp);
 
     if (sdp != NULL)
     {
@@ -744,5 +744,6 @@ main(int   argc,
   close(lconf.sigsock);
   StunClient_free(prg.mediaCnf->stunInstance);
   free(prg.mediaCnf);
+  free(prg.sigData);
   return 0;
 }

@@ -221,8 +221,6 @@ void
 parseUfrag(char* uline,
            char* ufrag)
 {
-  (void)uline;
-  (void)ufrag;
   strcpy(ufrag, strchr(uline, ':') + 1);
 }
 
@@ -252,15 +250,24 @@ parseSDP(ICELIB_INSTANCE* icelib,
   bool foundPasswd = false;
 
   printf("About to parse SDP--- (%i)\n", mediaidx);
+  printf("-------------- START   -----------\n");
+  printf("%s", sdp);
+  printf("-------------- END   -----------\n");
 
   char*      string = sdp;
   const char delim  = '\n';
   char*      line   = strchr(string, delim);
+  //unsigned long parsed = 0;
   while (line != NULL)
   {
     *line++ = '\0';
     char* attr = strtok(string, " \n");
 
+    if(strlen(line)<2){
+      continue;
+    }
+    //parsed+= strlen(line);
+    //printf("Line %lu (len:%i) %s\n", strlen(line), len, line);
     if (strncmp(attr, "c=IN", 4) == 0)
     {
       char addr[SOCKADDR_MAX_STRLEN];
@@ -296,7 +303,7 @@ parseSDP(ICELIB_INSTANCE* icelib,
       struct sockaddr_storage ss;
       sockaddr_initFromString( (struct sockaddr*)&ss,
                                addr_str );
-
+      printf("Adding ICE mediastream\n");
       mediaidx = ICELIB_addRemoteMediaStream(icelib,
                                              ufrag,
                                              passwd,
