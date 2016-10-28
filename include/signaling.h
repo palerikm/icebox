@@ -12,19 +12,20 @@ typedef enum {
   INVITING,
 }client_state;
 
-struct sig_data{
-  client_state        state;
-  size_t msgBufSize;
-  char *msgBuf;
+struct sig_data {
+  client_state state;
+  size_t       msgBufSize;
+  char*        msgBuf;
+  char*        sdp;
 };
 
 
 void
 signalPathHandler(struct sig_data*    sData,
                   struct mediaConfig* mconf,
-                  int              sockfd,
-                  char*            message,
-                  int              len);
+                  int                 sockfd,
+                  char*               message,
+                  int                 len);
 
 int
 inviteUser(client_state* state,
@@ -38,5 +39,4 @@ registerUser(client_state* state,
              char*         user_reg);
 
 void
-harvestAndCreateSDP(ICELIB_INSTANCE* icelib,
-                    char**           sdp);
+harvest(ICELIB_INSTANCE* icelib);

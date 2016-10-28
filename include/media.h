@@ -15,9 +15,9 @@
 #define MAX_MEDIA_SOCKETS 30
 
 struct mediaConfig {
-    pthread_t mSocketListenThread;
-    STUN_CLIENT_DATA*   stunInstance;
-    ICELIB_INSTANCE* icelib;
+  pthread_t         mSocketListenThread;
+  STUN_CLIENT_DATA* stunInstance;
+  ICELIB_INSTANCE*  icelib;
 };
 
 

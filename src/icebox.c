@@ -31,7 +31,7 @@
 #include "sdp.h"
 #include "media.h"
 
-
+#include "json.h"
 
 
 /* static const uint32_t TEST_THREAD_CTX = 1; */
@@ -88,18 +88,12 @@ sigSocketListen(void* ptr)
   struct pollfd           ufds[1];
   struct sockaddr_storage their_addr;
   unsigned char           buf[MAXBUFLEN];
-  /* int sockfd =*(int *)ptr; */
   struct sigListenConfig* lconfig = (struct sigListenConfig*) ptr;
   socklen_t               addr_len;
   int                     rv;
   int                     numbytes;
-/*  int                  i; */
-/*  StunMessage          stunMsg; */
   ufds[0].fd     = lconfig->sigsock;
   ufds[0].events = POLLIN;
-
-  /* ufds[1].fd     = lconfig->msock; */
-  /* ufds[1].events = POLLIN; */
 
   addr_len = sizeof their_addr;
 
@@ -116,39 +110,42 @@ sigSocketListen(void* ptr)
     }
     else
     {
-      /* check for events on s1: */
-      /* for (i = 0; i < 2; i++) */
-      /* { */
       if (ufds[0].revents & POLLIN)
       {
-        if ( ( numbytes =
-                 recvfrom(ufds[0].fd, buf, MAXBUFLEN, 0,
-                          (struct sockaddr*)&their_addr,
-                          &addr_len) ) == -1 )
+        while (1)
         {
-          perror("recvfrom");
-          exit(1);
+          numbytes = recvfrom(ufds[0].fd, buf, MAXBUFLEN, 0,
+                              (struct sockaddr*)&their_addr,
+                              &addr_len);
+          if (numbytes > 0)
+          {
+            lconfig->signal_path_handler(lconfig->prg->sigData,
+                                         lconfig->prg->mediaCnf,
+                                         ufds[0].fd,
+                                         (char*)buf,
+                                         numbytes);
+          }
+          else
+          {
+            break;
+          }
         }
-        /* Signal path */
-        /* if (i == 0) */
-        /* { */
-        lconfig->signal_path_handler(lconfig->prg->sigData,
-                                     lconfig->prg->mediaCnf,
-                                     ufds[0].fd,
-                                     (char*)buf,
-                                     numbytes);
-        /* } */
-        /* if (i == 1) */
-        /* { */
-        /*  if ( stunlib_isStunMsg(buf, numbytes) ) */
-        /*  { */
-        /*    stunlib_DecodeMessage(buf, numbytes, &stunMsg, NULL, NULL); */
-        /* TurnClient_HandleIncResp(lconfig->turnInst, */
-        /*                         &stunMsg, */
-        /*                         buf); */
-        /*  } */
-        /* } */
-        /* } */
+        /*
+         *  if ( ( numbytes =
+         *        recvfrom(ufds[0].fd, buf, MAXBUFLEN, 0,
+         *                 (struct sockaddr*)&their_addr,
+         *                 &addr_len) ) == -1 )
+         *  {
+         *  perror("recvfrom");
+         *  exit(1);
+         *  }
+         *
+         *  lconfig->signal_path_handler(lconfig->prg->sigData,
+         *                            lconfig->prg->mediaCnf,
+         *                            ufds[0].fd,
+         *                            (char*)buf,
+         *                            numbytes);
+         */
       }
     }
   }
@@ -222,9 +219,6 @@ sendPacket(void*                  ctx,
 
     sock_ttl = ttl;
 
-    /* sockaddr_toString(dstAddr, addrStr, SOCKADDR_MAX_STRLEN, true); */
-    /* printf("Sending Raw (To: '%s'(%i), Bytes:%i/%i  (Addr size: %u)\n",
-     * addrStr, sockHandle, numbytes, bufLen,addr_len); */
 
     if (dstAddr->sa_family == AF_INET)
     {
@@ -482,10 +476,10 @@ complete(void*        pUserData,
                      sizeof(laddr),
                      true );
   sockaddr_toString(
-     (const struct sockaddr*)&rcand->remoteCandidate[0].connectionAddr,
+    (const struct sockaddr*)&rcand->remoteCandidate[0].connectionAddr,
     raddr,
     sizeof(raddr),
-    true );
+    true);
   printf("Media Path: %s  -> %s\n", laddr, raddr);
   printf("******** Complete ********* (TODO: Handle this)\n");
   return 0;
@@ -594,8 +588,8 @@ main(int   argc,
 {
   struct prg_data        prg;
   struct sigListenConfig lconf;
-  prg.sigData = calloc(1, sizeof(struct sig_data));
-  prg.mediaCnf = calloc(1, sizeof(struct mediaConfig));
+  prg.sigData  = calloc( 1, sizeof(struct sig_data) );
+  prg.mediaCnf = calloc( 1, sizeof(struct mediaConfig) );
   /* struct mediaConfig     mconf; */
   /* struct addrinfo     servinfo, * p; */
 
@@ -657,10 +651,10 @@ main(int   argc,
   ICELIB_Constructor(prg.mediaCnf->icelib,
                      &iceConfig);
 
-  //ICELIB_setCallbackLog(prg.mediaCnf->icelib,
-  //                     ICELIB_printLog,
-  //                     NULL,
-  //                     ICELIB_logDebug);
+  /* ICELIB_setCallbackLog(prg.mediaCnf->icelib, */
+  /*                     ICELIB_printLog, */
+  /*                     NULL, */
+  /*                     ICELIB_logDebug); */
 
   ICELIB_setCallbackOutgoingBindingRequest(prg.mediaCnf->icelib,
                                            sendConnectivityCheck,
@@ -724,26 +718,31 @@ main(int   argc,
     }
 
     char* sdp = NULL;
-    harvestAndCreateSDP(prg.mediaCnf->icelib, &sdp);
+    harvest(prg.mediaCnf->icelib);
+    printf("Completed harvesting\n");
+    crateCandidateJson(prg.mediaCnf->icelib, &sdp);
+
     /* Start to listen here.. */
     pthread_create(&prg.mediaCnf->mSocketListenThread, NULL, mSocketListen,
                    (void*)prg.mediaCnf);
     inviteUser(&prg.sigData->state, lconf.sigsock, argv[3], prg.user, sdp);
 
     if (sdp != NULL)
-    {
-      free(sdp);
-    }
+     {
+     free(sdp);
+     }
 
   }
 
 
   /* Just wait a bit for now.. */
-  printf("About to sleep\n");
   sleep(100);
+  printf("Done sleeping teardown\n");
   close(lconf.sigsock);
   StunClient_free(prg.mediaCnf->stunInstance);
   free(prg.mediaCnf);
+  free(prg.sigData->sdp);
+  free(prg.sigData->msgBuf);
   free(prg.sigData);
   return 0;
 }

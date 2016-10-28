@@ -18,7 +18,8 @@ endif()
 
 add_executable ( icebox
                  media.c
-                 sdp.c
+                 jsmn.c
+                 json.c
                  candidate_harvester.c
                  signaling.c
                  sockethelper.c
